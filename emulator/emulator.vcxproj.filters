@@ -1,0 +1,177 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;c++;cppm;ixx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
+    </Filter>
+    <Filter Include="Resource Files">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    </Filter>
+    <Filter Include="Source Files\serverbrowser">
+      <UniqueIdentifier>{4b4e76cd-edea-4999-a8bf-f11600a0ace2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\serverbrowser">
+      <UniqueIdentifier>{83854c5f-804c-485d-ba7a-653dfcfec6c0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\crypto">
+      <UniqueIdentifier>{cf48ad90-f768-493b-9a83-9f1748859091}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\database">
+      <UniqueIdentifier>{6b9b4af0-6844-4128-9ab7-373e62bb984b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\database">
+      <UniqueIdentifier>{574d0310-2f26-4b03-a066-542ea03879da}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\crypto">
+      <UniqueIdentifier>{19ce4765-9e41-496c-990d-e586df2fd40e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\login">
+      <UniqueIdentifier>{a790a816-b6cc-4fab-8d64-216f8a77a898}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\dns">
+      <UniqueIdentifier>{c090d912-f340-48ec-9974-b17f5d4058ba}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\login">
+      <UniqueIdentifier>{164db4a7-6620-45de-96a8-154c1fdb81f4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\dns">
+      <UniqueIdentifier>{d3ccc413-98bd-41dc-9409-94eaa37a8c59}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="master.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="utils.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="gpsp.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="gpcm.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="gpcm.client.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="gpsp.client.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="http.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="qr.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="gs_query_parse.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="asio.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ms.client.h">
+      <Filter>Header Files\serverbrowser</Filter>
+    </ClInclude>
+    <ClInclude Include="ms.h">
+      <Filter>Header Files\serverbrowser</Filter>
+    </ClInclude>
+    <ClInclude Include="sl_request.h">
+      <Filter>Header Files\serverbrowser</Filter>
+    </ClInclude>
+    <ClInclude Include="sapphire.h">
+      <Filter>Header Files\crypto</Filter>
+    </ClInclude>
+    <ClInclude Include="sqlite3.h">
+      <Filter>Header Files\database</Filter>
+    </ClInclude>
+    <ClInclude Include="md5.h">
+      <Filter>Header Files\crypto</Filter>
+    </ClInclude>
+    <ClInclude Include="database.sqlite.h">
+      <Filter>Header Files\database</Filter>
+    </ClInclude>
+    <ClInclude Include="database.h">
+      <Filter>Header Files\database</Filter>
+    </ClInclude>
+    <ClInclude Include="database.memory.h">
+      <Filter>Header Files\database</Filter>
+    </ClInclude>
+    <ClInclude Include="dns.h">
+      <Filter>Header Files\dns</Filter>
+    </ClInclude>
+    <ClInclude Include="dns_details.h">
+      <Filter>Header Files\dns</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="master.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="main.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="utils.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="http.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="qr.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ms.client.cpp">
+      <Filter>Source Files\serverbrowser</Filter>
+    </ClCompile>
+    <ClCompile Include="ms.cpp">
+      <Filter>Source Files\serverbrowser</Filter>
+    </ClCompile>
+    <ClCompile Include="gs_query_parse.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="sl_request.cpp">
+      <Filter>Source Files\serverbrowser</Filter>
+    </ClCompile>
+    <ClCompile Include="md5.cpp">
+      <Filter>Source Files\crypto</Filter>
+    </ClCompile>
+    <ClCompile Include="sapphire.cpp">
+      <Filter>Source Files\crypto</Filter>
+    </ClCompile>
+    <ClCompile Include="database.memory.cpp">
+      <Filter>Source Files\database</Filter>
+    </ClCompile>
+    <ClCompile Include="database.cpp">
+      <Filter>Source Files\database</Filter>
+    </ClCompile>
+    <ClCompile Include="database.sqlite.cpp">
+      <Filter>Source Files\database</Filter>
+    </ClCompile>
+    <ClCompile Include="sqlite3.c">
+      <Filter>Source Files\database</Filter>
+    </ClCompile>
+    <ClCompile Include="gpcm.cpp">
+      <Filter>Source Files\login</Filter>
+    </ClCompile>
+    <ClCompile Include="gpsp.client.cpp">
+      <Filter>Source Files\login</Filter>
+    </ClCompile>
+    <ClCompile Include="gpsp.cpp">
+      <Filter>Source Files\login</Filter>
+    </ClCompile>
+    <ClCompile Include="gpcm.client.cpp">
+      <Filter>Source Files\login</Filter>
+    </ClCompile>
+    <ClCompile Include="dns_details.cpp">
+      <Filter>Source Files\dns</Filter>
+    </ClCompile>
+    <ClCompile Include="dns.cpp">
+      <Filter>Source Files\dns</Filter>
+    </ClCompile>
+  </ItemGroup>
+</Project>
