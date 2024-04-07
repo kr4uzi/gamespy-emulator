@@ -24,6 +24,7 @@
     <ProjectGuid>{db6e8e49-01f2-4f0e-8d41-d4206f033fde}</ProjectGuid>
     <RootNamespace>emulator</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <ProjectName>server</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">

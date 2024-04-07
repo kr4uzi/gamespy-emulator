@@ -45,31 +45,10 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="master.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="utils.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="gpsp.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="gpcm.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="gpcm.client.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="gpsp.client.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="http.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="qr.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="gs_query_parse.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="asio.h">
@@ -108,11 +87,29 @@
     <ClInclude Include="dns_details.h">
       <Filter>Header Files\dns</Filter>
     </ClInclude>
+    <ClInclude Include="gpcm.client.h">
+      <Filter>Header Files\login</Filter>
+    </ClInclude>
+    <ClInclude Include="gpcm.h">
+      <Filter>Header Files\login</Filter>
+    </ClInclude>
+    <ClInclude Include="gpsp.client.h">
+      <Filter>Header Files\login</Filter>
+    </ClInclude>
+    <ClInclude Include="gpsp.h">
+      <Filter>Header Files\login</Filter>
+    </ClInclude>
+    <ClInclude Include="master.h">
+      <Filter>Header Files\serverbrowser</Filter>
+    </ClInclude>
+    <ClInclude Include="qr.h">
+      <Filter>Header Files\serverbrowser</Filter>
+    </ClInclude>
+    <ClInclude Include="gs_query_parse.h">
+      <Filter>Header Files\serverbrowser</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="master.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -122,17 +119,11 @@
     <ClCompile Include="http.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="qr.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="ms.client.cpp">
       <Filter>Source Files\serverbrowser</Filter>
     </ClCompile>
     <ClCompile Include="ms.cpp">
       <Filter>Source Files\serverbrowser</Filter>
-    </ClCompile>
-    <ClCompile Include="gs_query_parse.cpp">
-      <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="sl_request.cpp">
       <Filter>Source Files\serverbrowser</Filter>
@@ -172,6 +163,15 @@
     </ClCompile>
     <ClCompile Include="dns.cpp">
       <Filter>Source Files\dns</Filter>
+    </ClCompile>
+    <ClCompile Include="master.cpp">
+      <Filter>Source Files\serverbrowser</Filter>
+    </ClCompile>
+    <ClCompile Include="gs_query_parse.cpp">
+      <Filter>Source Files\serverbrowser</Filter>
+    </ClCompile>
+    <ClCompile Include="qr.cpp">
+      <Filter>Source Files\serverbrowser</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>

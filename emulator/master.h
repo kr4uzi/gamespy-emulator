@@ -1,6 +1,5 @@
 #pragma once
 #include "asio.h"
-#include "qr.h"
 #include <array>
 #include <ctime>
 #include <map>
@@ -10,12 +9,12 @@
 
 namespace gamespy {
 	class Database;
+	struct QRPacket;
 	struct ServerData {
 		std::time_t last_update;
 		std::string proof;
 		std::array<std::uint8_t, 4> instance;
 
-		std::uint8_t GetFlag() const noexcept;
 		boost::asio::ip::address public_ip;
 		std::optional<boost::asio::ip::port_type> public_port;
 		std::optional<boost::asio::ip::address> private_ip;
@@ -45,9 +44,9 @@ namespace gamespy {
 
 		std::vector<ServerData> GetServers(const std::string_view& game, const std::string& filter) const noexcept;
 
-		boost::asio::awaitable<void> HandleAvailable(boost::asio::ip::udp::endpoint client, QRPacket packet);
-		boost::asio::awaitable<void> HandleHeartbeat(boost::asio::ip::udp::endpoint client, QRPacket packet);
-		boost::asio::awaitable<void> HandleKeepAlive(boost::asio::ip::udp::endpoint client, QRPacket packet);
-		boost::asio::awaitable<void> HandleChallenge(boost::asio::ip::udp::endpoint client, QRPacket packet);
+		boost::asio::awaitable<void> HandleAvailable(const boost::asio::ip::udp::endpoint& client, QRPacket& packet);
+		boost::asio::awaitable<void> HandleHeartbeat(const boost::asio::ip::udp::endpoint& client, QRPacket& packet);
+		boost::asio::awaitable<void> HandleKeepAlive(const boost::asio::ip::udp::endpoint& client, QRPacket& packet);
+		boost::asio::awaitable<void> HandleChallenge(const boost::asio::ip::udp::endpoint& client, QRPacket& packet);
 	};
 }
