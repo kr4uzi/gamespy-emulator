@@ -71,9 +71,6 @@ boost::asio::awaitable<void> DNSServer::AcceptConnections()
 			continue;
 		}
 
-		for (const auto& q : packet->questions)
-			std::println("dns query ({}): {} - {}", client.protocol() == udp::v6() ? "v6" : "v4", q.name, (int)std::to_underlying(q.type));
-
 		HandlePacket(*packet);
 		co_await m_Socket.async_send_to(boost::asio::buffer(packet->to_bytes()), client, boost::asio::use_awaitable);
 	}
