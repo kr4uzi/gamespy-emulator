@@ -33,7 +33,7 @@ std::vector<ServerData> gamespy::MasterServer::GetServers(const std::string_view
 				{"country", "TEST"},
 				{"gamename", "battlefield2"},
 				{"gamever", "1.5.3153-802.0"},
-				{"mapname", "Awesome Map"},
+				{"mapname", "MapName"},
 				{"gametype", "gpm_cq"},
 				{"gamevariant", "pr"},
 				{"numplayers", "100"},
@@ -56,7 +56,7 @@ std::vector<ServerData> gamespy::MasterServer::GetServers(const std::string_view
 				{"bf2_tkmode", "No Punish"},
 				{"bf2_startdelay", "240.0"},
 				{"bf2_spawntime", "300.0"},
-				{"bf2_sponsortext", "Welcome to an awesome server!"},
+				{"bf2_sponsortext", "sponsortext!"},
 				{"bf2_sponsorlogo_url", "http://"},
 				{"bf2_communitylogo_url", "http://"},
 				{"bf2_scorelimit", "100"},
@@ -87,14 +87,10 @@ boost::asio::awaitable<void> MasterServer::HandleAvailable(const udp::endpoint& 
 	// sample package: 0x09 0x00 0x00 0x00 0x00 0x62 0x61 0x74 0x74 0x6C 0x65 0x66 0x69 0x65 0x6C 0x64 0x32 0x00
 	//                     |   INSTANCE KEY   |  b    a    t    t    l    e    f    i    e    l    d    2  |
 	if (packet.values.size() == 1) {
-		if (m_DB.HasGame(packet.values.front().first)) {
-			static constexpr std::array availableResponse = { 0xFE, 0xFD, 0x09, 0x00, 0x00, 0x00, 0x00, 0x00 };
-			co_await m_Socket.async_send_to(boost::asio::buffer(availableResponse), client, boost::asio::use_awaitable);
-		}
-		else {
-			static constexpr std::array unavailableResponse = { 0xFE, 0xFD, 0x09, 0x00, 0x00, 0x00, 0x01 };
-			co_await m_Socket.async_send_to(boost::asio::buffer(unavailableResponse), client, boost::asio::use_awaitable);
-		}
+		if (m_DB.HasGame(packet.values.front().first))
+			co_await m_Socket.async_send_to(boost::asio::buffer("\xFE\xFD\x09\0\0\0\0"), client, boost::asio::use_awaitable);
+		else
+			co_await m_Socket.async_send_to(boost::asio::buffer("\xFE\xFD\x09\0\0\0\1"), client, boost::asio::use_awaitable);
 	}
 	else
 		std::println("[master] received invalid IP VERIFY packet (too short)");
