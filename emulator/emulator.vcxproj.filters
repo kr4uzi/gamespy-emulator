@@ -43,6 +43,9 @@
     <Filter Include="Header Files\dns">
       <UniqueIdentifier>{d3ccc413-98bd-41dc-9409-94eaa37a8c59}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Header Files\http">
+      <UniqueIdentifier>{a1c5de9a-449d-4f0b-b891-fbc379341b11}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="utils.h">
@@ -65,9 +68,6 @@
     </ClInclude>
     <ClInclude Include="sapphire.h">
       <Filter>Header Files\crypto</Filter>
-    </ClInclude>
-    <ClInclude Include="sqlite3.h">
-      <Filter>Header Files\database</Filter>
     </ClInclude>
     <ClInclude Include="md5.h">
       <Filter>Header Files\crypto</Filter>
@@ -108,6 +108,9 @@
     <ClInclude Include="gs_query_parse.h">
       <Filter>Header Files\serverbrowser</Filter>
     </ClInclude>
+    <ClInclude Include="textpacket.h">
+      <Filter>Header Files\login</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
@@ -143,9 +146,6 @@
     <ClCompile Include="database.sqlite.cpp">
       <Filter>Source Files\database</Filter>
     </ClCompile>
-    <ClCompile Include="sqlite3.c">
-      <Filter>Source Files\database</Filter>
-    </ClCompile>
     <ClCompile Include="gpcm.cpp">
       <Filter>Source Files\login</Filter>
     </ClCompile>
@@ -172,6 +172,9 @@
     </ClCompile>
     <ClCompile Include="qr.cpp">
       <Filter>Source Files\serverbrowser</Filter>
+    </ClCompile>
+    <ClCompile Include="textpacket.cpp">
+      <Filter>Source Files\login</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>

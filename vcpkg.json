@@ -1,0 +1,10 @@
+{
+  "dependencies": [
+    "boost-asio",
+    "boost-crc",
+    "boost-iterator",
+    "boost-serialization",
+    "sqlite3",
+    "boost-beast"
+  ]
+}

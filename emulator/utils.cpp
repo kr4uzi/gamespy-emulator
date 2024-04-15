@@ -6,6 +6,7 @@
 #include <boost/algorithm/string.hpp>
 #include <random>
 #include <sstream>
+#include <ranges>
 using namespace gamespy;
 
 namespace {
@@ -55,56 +56,14 @@ namespace {
 	}
 
 	std::string gspassenc(const std::string& password) {
-		std::minstd_rand0 rnd(0x79707367); // "gspy"
+		auto rnd = std::minstd_rand0{ 0x79707367 }; // "gspy"
 
-		std::string encoded(password);
+		auto encoded = std::string{ password };
 		for (auto& c : encoded)
 			c ^= (rnd() % 0xFF);
 
 		return encoded;
 	}
-}
-
-std::string utils::TextPacket::str() const {
-	std::string out;
-	if (!type.empty()) {
-		out += "\\" + type + "\\";
-	}
-
-	for (const auto& keyValue : values) {
-		out += "\\" + keyValue.first + "\\" + keyValue.second;
-	}
-
-	out += PACKET_END;
-	return out;
-}
-
-std::queue<utils::TextPacket> utils::TextPacket::parse(const std::string& buffer)
-{
-	std::queue<utils::TextPacket> packets;
-	std::string::size_type beginPos = 0;
-	auto endPos = buffer.find(PACKET_END, beginPos);
-
-	while (endPos != std::string::npos) {
-		std::vector<std::string> packet = SplitString(buffer.substr(beginPos, endPos - beginPos), '\\');
-		std::map<std::string, std::string> packetValues;
-		for (decltype(packet)::size_type i = 1, len = packet.size(); i < len - 1; i += 2) {
-			std::string key = packet[i];
-			//std::transform(key.cbegin(), key.cend(), key.begin(), std::tolower);
-
-			packetValues[key] = packet[i + 1];
-		}
-
-		std::string type = packet[0];
-		//std::transform(type.begin(), type.end(), type.begin(), std::tolower);
-
-		packets.push(utils::TextPacket{ .type = type,.values = std::move(packetValues) });
-
-		beginPos = endPos + PACKET_END.length();
-		endPos = buffer.find(PACKET_END, beginPos);
-	}
-
-	return packets;
 }
 
 std::string utils::random_string(const std::string& table, std::string::size_type len)
@@ -159,7 +118,7 @@ std::string utils::passdecode(std::string password)
 	return gspassenc(base64_decode(password));
 }
 
-std::string utils::generate_challenge(const std::string& name, const std::string& md5Password, const std::string& localChallenge, const std::string& remoteChallenge)
+std::string utils::generate_challenge(const std::string_view& name, const std::string_view& md5Password, const std::string_view& localChallenge, const std::string_view& remoteChallenge)
 {
 	std::string challenge(md5Password);
 	challenge += std::string(48, ' ');

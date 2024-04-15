@@ -1,8 +1,11 @@
 #include "gpcm.client.h"
 #include "utils.h"
+#include "textpacket.h"
 #include <boost/crc.hpp>
 #include <format>
 #include <print>
+#include <cctype>
+#include <ranges>
 using namespace gamespy;
 
 using namespace std::string_literals;
@@ -46,7 +49,7 @@ boost::asio::awaitable<void> LoginClient::SendChallenge()
 	m_State = STATES::AUTHENTICATING;
 }
 
-boost::asio::awaitable<void> LoginClient::HandleLogin(const utils::TextPacket& packet)
+boost::asio::awaitable<void> LoginClient::HandleLogin(const TextPacket& packet)
 {
 	if (m_State != STATES::AUTHENTICATING) {
 		std::print("[login] received login package in non-authenticating state");
@@ -62,7 +65,7 @@ boost::asio::awaitable<void> LoginClient::HandleLogin(const utils::TextPacket& p
 	}
 		
 	if (!m_DB.HasPlayer(nameIter->second)) {
-		co_await m_Socket.async_send(boost::asio::buffer(R"(\error\\err\265\fatal\\errmsg\Username [)" + nameIter->second + R"(] doesn't exist!\id\1\final\)"), boost::asio::use_awaitable);
+		co_await m_Socket.async_send(boost::asio::buffer(R"(\error\\err\265\fatal\\errmsg\Username [)" + std::string{ nameIter->second } + R"(] doesn't exist!\id\1\final\)"), boost::asio::use_awaitable);
 		co_return;
 	}
 
@@ -75,7 +78,7 @@ boost::asio::awaitable<void> LoginClient::HandleLogin(const utils::TextPacket& p
 	m_PlayerData = player;
 
 	boost::crc_16_type session;
-	session.process_bytes(nameIter->second.c_str(), nameIter->second.length());
+	session.process_bytes(nameIter->second.data(), nameIter->second.length());
 	m_PlayerData->session = session.checksum();
 
 	auto proof = utils::generate_challenge(m_PlayerData->name, player.password, m_ServerChallenge, clientChallengeIter->second);
@@ -88,7 +91,7 @@ boost::asio::awaitable<void> LoginClient::HandleLogin(const utils::TextPacket& p
 	//m_HeartBeatTimer.cancel();
 }
 
-boost::asio::awaitable<void> LoginClient::HandleNewUser(const utils::TextPacket& packet)
+boost::asio::awaitable<void> LoginClient::HandleNewUser(const TextPacket& packet)
 {
 	if (m_State != STATES::AUTHENTICATING) {
 		std::print("[login] received newuser package in non-authenticating state");
@@ -109,7 +112,7 @@ boost::asio::awaitable<void> LoginClient::HandleNewUser(const utils::TextPacket&
 		co_return;
 	}
 
-	std::string password = utils::passdecode(passwordEncIter->second);
+	std::string password = utils::passdecode(std::string{ passwordEncIter->second });
 	if (password.length() < 3)
 		co_await m_Socket.async_send(boost::asio::buffer(R"(\error\\err\0\fatal\\errmsg\The password is too short, must be 3 characters at least!\id\1\final\)"), boost::asio::use_awaitable);
 	else if (password.length() > 30)
@@ -126,7 +129,7 @@ boost::asio::awaitable<void> LoginClient::HandleNewUser(const utils::TextPacket&
 	}
 }
 
-boost::asio::awaitable<void> LoginClient::HandleGetProfile(const utils::TextPacket& packet)
+boost::asio::awaitable<void> LoginClient::HandleGetProfile(const TextPacket& packet)
 {
 	if (m_State == STATES::AUTHENTICATED) {
 		co_await m_Socket.async_send(boost::asio::buffer(GeneratePlayerData()), boost::asio::use_awaitable);
@@ -136,35 +139,32 @@ boost::asio::awaitable<void> LoginClient::HandleGetProfile(const utils::TextPack
 		m_ProfileDataSent = true;
 	}
 	else {
-		std::print("[login] received getprofile package in non-authenticated state");
+		std::println("[login] received getprofile package in non-authenticated state");
 		co_await m_Socket.async_send(boost::asio::buffer(R"(\error\\err\0\fatal\\errmsg\Invalid Query!\id\1\final\)"), boost::asio::use_awaitable);
 	}
 }
 
-boost::asio::awaitable<void> LoginClient::HandleUpdateProfile(const utils::TextPacket& packet)
+boost::asio::awaitable<void> LoginClient::HandleUpdateProfile(const TextPacket& packet)
 {
 	if (m_State == STATES::AUTHENTICATED) {
 		auto countryIter = packet.values.find("countrycode");
 		if (countryIter != packet.values.end()) {
-			std::string countryCode = countryIter->second;
-			transform(countryCode.begin(), countryCode.end(), countryCode.begin(), toupper);
-
-			std::string oldCountryCode = m_PlayerData->country;
-			m_PlayerData->country = countryCode;
+			auto oldCountry = m_PlayerData->country;
+			m_PlayerData->country = countryIter->second | std::views::transform((int(*)(int))std::toupper) | std::ranges::to<std::string>();
 			m_DB.UpdatePlayer(*m_PlayerData);
 			if (m_DB.HasError()) {
-				m_PlayerData->country = oldCountryCode;
+				m_PlayerData->country = oldCountry;
 				co_await m_Socket.async_send(boost::asio::buffer(R"(\error\\err\0\fatal\\errmsg\Error updating account!\id\1\final\)"s), boost::asio::use_awaitable);
 			}
 		}
 	}
 	else {
-		std::print("[login] received updatepro package in non-authenticated state");
+		std::println("[login] received updatepro package in non-authenticated state");
 		co_await m_Socket.async_send(boost::asio::buffer(R"(\error\\err\0\fatal\\errmsg\Invalid Query!\id\1\final\)"), boost::asio::use_awaitable);
 	}
 }
 
-boost::asio::awaitable<void> LoginClient::HandleLogout(const utils::TextPacket& packet)
+boost::asio::awaitable<void> LoginClient::HandleLogout(const TextPacket& packet)
 {
 	m_Socket.close();
 	co_return;
@@ -176,34 +176,33 @@ boost::asio::awaitable<void> LoginClient::Process()
 
 	boost::asio::streambuf buff;
 	while (m_Socket.is_open()) {
-		auto [error, length] = co_await boost::asio::async_read_until(m_Socket, buff, R"(\final\)", boost::asio::as_tuple(boost::asio::use_awaitable));
+		auto [error, length] = co_await boost::asio::async_read_until(m_Socket, buff, TextPacket::PACKET_END, boost::asio::as_tuple(boost::asio::use_awaitable));
 		if (error) {
-			std::println("[login] error {}", error.what());
 			break;
 		}
 
-		auto incoming = utils::TextPacket::parse(std::string(boost::asio::buffer_cast<const char*>(buff.data()), length));
-		while (!incoming.empty()) {
-			const auto& packet = incoming.front();
-			if (packet.type == "login")
-				co_await HandleLogin(packet);
-			else if (packet.type == "newuser")
-				co_await HandleNewUser(packet);
-			else if (packet.type == "getprofile")
-				co_await HandleGetProfile(packet);
-			else if (packet.type == "updatepro")
-				co_await HandleUpdateProfile(packet);
-			else if (packet.type == "logout")
-				co_await HandleLogout(packet);
-			else {
-				std::print("[login] received unknown packet of type {}: {}", packet.type, packet.str());
-				co_await m_Socket.async_send(boost::asio::buffer(R"(\error\\err\0\fatal\\errmsg\Invalid Query!\id\1\final\)"), boost::asio::use_awaitable);
-			}
-
-			incoming.pop();
+		auto packet = TextPacket::parse(std::span{ boost::asio::buffer_cast<const char*>(buff.data()), buff.size() });
+		if (!packet) {
+			std::println("[login] failed to parse packet");
+			break;
 		}
 
-		buff.consume(length);
+		if (packet->type == "login")
+			co_await HandleLogin(*packet);
+		else if (packet->type == "newuser")
+			co_await HandleNewUser(*packet);
+		else if (packet->type == "getprofile")
+			co_await HandleGetProfile(*packet);
+		else if (packet->type == "updatepro")
+			co_await HandleUpdateProfile(*packet);
+		else if (packet->type == "logout")
+			co_await HandleLogout(*packet);
+		else {
+			std::println("[login] received unknown packet of type {}: {}", packet->type, packet->str());
+			co_await m_Socket.async_send(boost::asio::buffer(R"(\error\\err\0\fatal\\errmsg\Invalid Query!\id\1\final\)"), boost::asio::use_awaitable);
+		}
+
+		buff.consume(buff.size());
 	}
 }
 

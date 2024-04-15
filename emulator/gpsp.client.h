@@ -2,7 +2,7 @@
 #include "asio.h"
 
 namespace gamespy {
-	namespace utils { struct TextPacket; }
+	struct TextPacket;
 	class Database;
 
 	class SearchClient {
@@ -20,7 +20,7 @@ namespace gamespy {
 		boost::asio::awaitable<void> Process();
 
 	private:
-		boost::asio::awaitable<void> HandleRetrieveProfiles(const utils::TextPacket& packet);
-		boost::asio::awaitable<void> HandleProfileExists(const utils::TextPacket& packet);
+		boost::asio::awaitable<void> HandleRetrieveProfiles(const TextPacket& packet);
+		boost::asio::awaitable<void> HandleProfileExists(const TextPacket& packet);
 	};
 }

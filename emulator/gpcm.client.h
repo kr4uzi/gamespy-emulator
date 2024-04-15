@@ -5,10 +5,7 @@
 #include <string>
 
 namespace gamespy {
-	namespace utils {
-		struct TextPacket;
-	}
-
+	struct TextPacket;
 	class LoginClient {
 		boost::asio::ip::tcp::socket m_Socket;
 		boost::asio::deadline_timer m_HeartBeatTimer;
@@ -43,10 +40,10 @@ namespace gamespy {
 		boost::asio::awaitable<void> KeepAliveClient();
 
 		boost::asio::awaitable<void> SendChallenge();
-		boost::asio::awaitable<void> HandleLogin(const utils::TextPacket& packet);
-		boost::asio::awaitable<void> HandleNewUser(const utils::TextPacket& packet);
-		boost::asio::awaitable<void> HandleGetProfile(const utils::TextPacket& packet);
-		boost::asio::awaitable<void> HandleUpdateProfile(const utils::TextPacket& packet);
-		boost::asio::awaitable<void> HandleLogout(const utils::TextPacket& packet);
+		boost::asio::awaitable<void> HandleLogin(const TextPacket& packet);
+		boost::asio::awaitable<void> HandleNewUser(const TextPacket& packet);
+		boost::asio::awaitable<void> HandleGetProfile(const TextPacket& packet);
+		boost::asio::awaitable<void> HandleUpdateProfile(const TextPacket& packet);
+		boost::asio::awaitable<void> HandleLogout(const TextPacket& packet);
 	};
 }

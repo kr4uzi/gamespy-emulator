@@ -1,6 +1,6 @@
 #include "database.sqlite.h"
 namespace sqlite {
-#include "sqlite3.h"
+#include <sqlite3.h>
 }
 #include <print>
 using namespace gamespy;

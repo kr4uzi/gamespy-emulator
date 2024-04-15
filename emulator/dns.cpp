@@ -10,7 +10,7 @@ void HandlePacket(dns::dns_packet& packet)
 {
 	for (const auto& q : packet.questions) {
 		if ((q.type == dns::dns_question::QTYPE::A || q.type == dns::dns_question::QTYPE::AAAA) && q.klass == dns::dns_question::QCLASS::INTERNET) {
-			if (q.name.ends_with("gamespy.com")) {
+			if (q.name.ends_with("gamespy.com") || q.name.ends_with("dice.se")) {
 				auto data = std::vector<std::uint8_t>{};
 				if (q.type == dns::dns_question::QTYPE::A)
 					data.append_range(boost::asio::ip::address_v4::loopback().to_bytes());
@@ -28,7 +28,7 @@ void HandlePacket(dns::dns_packet& packet)
 				});
 			}
 
-			//packet.is_authoritative_answer = true;
+			packet.authoritative_answer = true;
 		}
 		else {
 			packet.response_type = dns::dns_packet::RCODE::NXDomain;
@@ -37,13 +37,13 @@ void HandlePacket(dns::dns_packet& packet)
 	}
 
 	packet.response = true;
-	packet.recursion_available = 0;
+	packet.recursion_available = false;
 }
 
 DNSServer::DNSServer(boost::asio::io_context& context, Database& db)
 	: m_Socket(context, udp::endpoint(udp::v6(), PORT)), m_DB(db)
 {
-	std::println("[dns] listening on {}", PORT);
+	std::println("[dns] listening on {} for *.gamespy.com", PORT);
 }
 
 DNSServer::~DNSServer()
@@ -51,10 +51,9 @@ DNSServer::~DNSServer()
 
 }
 
-#include <span>
 boost::asio::awaitable<void> DNSServer::AcceptConnections()
 {
-	std::array<std::uint8_t, 512> buff;
+	auto buff = std::array<std::uint8_t, 512>{};
 	while (m_Socket.is_open()) {
 		udp::endpoint client;
 		const auto& [error, length] = co_await m_Socket.async_receive_from(boost::asio::buffer(buff), client, boost::asio::as_tuple(boost::asio::use_awaitable));
@@ -62,14 +61,8 @@ boost::asio::awaitable<void> DNSServer::AcceptConnections()
 			continue;
 
 		auto packet = dns::dns_packet::from_bytes(buff);
-		if (!packet) {
-			std::println("[dns] failed to parse packet");
+		if (!packet || packet->questions.size() == 0)
 			continue;
-		}
-		else if (packet->questions.size() == 0) {
-			std::println("[dns] no questions");
-			continue;
-		}
 
 		HandlePacket(*packet);
 		co_await m_Socket.async_send_to(boost::asio::buffer(packet->to_bytes()), client, boost::asio::use_awaitable);

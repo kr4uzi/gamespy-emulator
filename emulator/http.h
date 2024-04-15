@@ -2,12 +2,12 @@
 #include "asio.h"
 
 namespace gamespy {
-	class NewsServer {
+	class HttpServer {
 		boost::asio::ip::tcp::acceptor m_Acceptor;
 
 	public:
-		NewsServer(boost::asio::io_context& context);
-		~NewsServer();
+		HttpServer(boost::asio::io_context& context);
+		~HttpServer();
 
 		boost::asio::awaitable<void> AcceptClients();
 

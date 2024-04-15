@@ -72,16 +72,35 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <IncludePath>C:\boost_1_84_0;C:\Program Files (x86)\MySQL\Connector C++ 8.0;$(IncludePath)</IncludePath>
+    <IncludePath>C:\Program Files (x86)\MySQL\Connector C++ 8.0;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
-    <IncludePath>C:\boost_1_84_0;C:\Program Files (x86)\MySQL\Connector C++ 8.0;$(IncludePath)</IncludePath>
+    <IncludePath>C:\Program Files (x86)\MySQL\Connector C++ 8.0;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
-    <IncludePath>C:\boost_1_84_0;C:\Program Files (x86)\MySQL\Connector C++ 8.0;$(IncludePath)</IncludePath>
+    <IncludePath>C:\Program Files (x86)\MySQL\Connector C++ 8.0;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <IncludePath>C:\boost_1_84_0;C:\Program Files (x86)\MySQL\Connector C++ 8.0;$(IncludePath)</IncludePath>
+    <IncludePath>C:\Program Files (x86)\MySQL\Connector C++ 8.0;$(IncludePath)</IncludePath>
+  </PropertyGroup>
+  <PropertyGroup Label="Vcpkg">
+    <VcpkgEnableManifest>true</VcpkgEnableManifest>
+  </PropertyGroup>
+  <PropertyGroup Label="Vcpkg" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <VcpkgUseStatic>true</VcpkgUseStatic>
+    <VcpkgUseMD>false</VcpkgUseMD>
+  </PropertyGroup>
+  <PropertyGroup Label="Vcpkg" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <VcpkgUseStatic>true</VcpkgUseStatic>
+    <VcpkgUseMD>false</VcpkgUseMD>
+  </PropertyGroup>
+  <PropertyGroup Label="Vcpkg" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <VcpkgUseStatic>true</VcpkgUseStatic>
+    <VcpkgUseMD>false</VcpkgUseMD>
+  </PropertyGroup>
+  <PropertyGroup Label="Vcpkg" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <VcpkgUseStatic>true</VcpkgUseStatic>
+    <VcpkgUseMD>false</VcpkgUseMD>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -173,8 +192,8 @@
     <ClInclude Include="qr.h" />
     <ClInclude Include="sapphire.h" />
     <ClInclude Include="sl_request.h" />
-    <ClInclude Include="sqlite3.h" />
     <ClInclude Include="gs_query_parse.h" />
+    <ClInclude Include="textpacket.h" />
     <ClInclude Include="utils.h" />
   </ItemGroup>
   <ItemGroup>
@@ -198,7 +217,7 @@
     <ClCompile Include="qr.cpp" />
     <ClCompile Include="sapphire.cpp" />
     <ClCompile Include="sl_request.cpp" />
-    <ClCompile Include="sqlite3.c" />
+    <ClCompile Include="textpacket.cpp" />
     <ClCompile Include="utils.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

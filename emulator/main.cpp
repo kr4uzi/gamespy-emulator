@@ -13,10 +13,10 @@
 #include <fstream>
 #include <regex>
 
-auto ParseGameList(std::istream stream)
+auto ParseGameList(std::istream& stream)
 {
 	// FULL-TITLE	GAMENAME	GAMEID	SECRETKEY	STATS_VERSION	STATS_KEY
-	std::regex pattern(R"(^(.+)\t(\w+)\t(\d*)\t(\w*)\t(\d*)\t\(\w*)$)");
+	std::regex pattern(R"(^(.+)\t(\w+)\t(\d*)\t(\w*)\t(\d*)\t(\w*)$)");
 
 	std::map<std::string, gamespy::GameData> games;
 	for (std::string line; std::getline(stream, line);) {
@@ -26,7 +26,8 @@ auto ParseGameList(std::istream stream)
 		std::smatch match;
 		if (std::regex_match(line, match, pattern)) {
 			auto name = match[2].str();
-			games.emplace(std::make_pair(name, gamespy::GameData(name, match[1].str(), match[4].str(), 6500, std::stoul(match[5]), match[6].str())));
+			auto queryPortStr = match[5].str();
+			games.emplace(std::make_pair(name, gamespy::GameData(name, match[1], match[4], 6500, queryPortStr.empty() ? 0 : std::stoul(queryPortStr), match[6].str())));
 		}
 	}
 
@@ -41,27 +42,30 @@ int main()
 		signals.async_wait([&](auto, auto) {
 			std::println("SHUTDOWN REQUESTED");
 			context.stop();
-			});
+		});
 
-		std::map<std::string, gamespy::GameData> games {
-			{ "battlefield2", gamespy::GameData("battlefield2", "Battlefield 2", "hW6m9a", 6500, 1, "") },
-			{ "gmtest", gamespy::GameData("gmtest", "Test / demo / temporary", "HA6zkS", 6500, 1, "") }
-		};
+		auto gameList = std::ifstream{ "game_list.tsv" };
+		if (!gameList.is_open()) {
+			std::println("Failed to open game_list.tsv");
+			return 1;
+		}
+
+		auto games = ParseGameList(gameList);
 
 		std::unique_ptr<gamespy::Database> db = std::make_unique<gamespy::SQLite3DB>("gs_emulator.sqlite3", games);
 		if (!db->HasError()) {
-			gamespy::MasterServer master(context, *db);
-			gamespy::LoginServer gpcm(context, *db);
-			gamespy::SearchServer gpsp(context, *db);
-			gamespy::BrowserServer ms(context, master, *db);
-			gamespy::NewsServer news(context);
-			gamespy::DNSServer dns(context, *db);
+			auto master = gamespy::MasterServer{ context, *db };
+			auto gpcm = gamespy::LoginServer{ context, *db };
+			auto gpsp = gamespy::SearchServer{ context, *db };
+			auto ms = gamespy::BrowserServer{ context, master, *db };
+			auto http = gamespy::HttpServer{ context };
+			auto dns = gamespy::DNSServer{ context, *db };
 
 			boost::asio::co_spawn(context, master.AcceptConnections(), boost::asio::detached);
 			boost::asio::co_spawn(context, gpcm.AcceptClients(), boost::asio::detached);
 			boost::asio::co_spawn(context, gpsp.AcceptClients(), boost::asio::detached);
 			boost::asio::co_spawn(context, ms.AcceptClients(), boost::asio::detached);
-			boost::asio::co_spawn(context, news.AcceptClients(), boost::asio::detached);
+			boost::asio::co_spawn(context, http.AcceptClients(), boost::asio::detached);
 			boost::asio::co_spawn(context, dns.AcceptConnections(), boost::asio::detached);
 
 			// http://eapusher.dice.se/image.asp?lang=English
