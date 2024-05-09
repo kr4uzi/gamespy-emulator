@@ -4,8 +4,8 @@
 #include <utility>
 using namespace gamespy;
 
-BrowserServer::BrowserServer(boost::asio::io_context& context, MasterServer& master, Database& db)
-	: m_Acceptor(context, boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v4(), PORT)), m_Master(master), m_DB(db)
+BrowserServer::BrowserServer(boost::asio::io_context& context, GameDB& db)
+	: m_Acceptor(context, boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v4(), PORT)),  m_DB(db)
 {
 	std::println("[browser] starting up: {} TCP", PORT);
 	std::println("[browser] (%s.ms%d.gamespy.com)");
@@ -26,6 +26,11 @@ boost::asio::awaitable<void> BrowserServer::AcceptClients()
 
 boost::asio::awaitable<void> BrowserServer::HandleIncoming(boost::asio::ip::tcp::socket socket)
 {
-	BrowserClient client(std::move(socket), m_Master, m_DB);
-	co_await client.Process();
+	try {
+		BrowserClient client(std::move(socket), m_DB);
+		co_await client.Process();
+	}
+	catch (std::exception& e) {
+		std::println("[ms]error: {}", e.what());
+	}
 }

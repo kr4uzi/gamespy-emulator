@@ -4,8 +4,8 @@
 #include <utility>
 using namespace gamespy;
 
-LoginServer::LoginServer(boost::asio::io_context& context, Database& db)
-	: m_Acceptor(context, boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v4(), PORT)), m_DB(db)
+LoginServer::LoginServer(boost::asio::io_context& context, PlayerDB& db)
+	: m_Acceptor{ context, boost::asio::ip::tcp::endpoint{ boost::asio::ip::tcp::v4(), PORT } }, m_DB{ db }
 {
 	std::println("[login] starting up: {} TCP", PORT);
 	std::println("[login] (gpcm.gamespy.com)");
@@ -29,6 +29,12 @@ boost::asio::awaitable<void> LoginServer::AcceptClients()
 
 boost::asio::awaitable<void> LoginServer::HandleIncoming(boost::asio::ip::tcp::socket socket)
 {
-	LoginClient client(std::move(socket), m_DB);
-	co_await client.Process();
+	auto addr = socket.remote_endpoint().address().to_string();
+	try {
+		LoginClient client(std::move(socket), m_DB);
+		co_await client.Process();
+	}
+	catch (const std::exception& e) {
+		std::println("[gpcm][error]{} - {}", addr, e.what());
+	}
 }

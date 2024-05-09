@@ -24,10 +24,7 @@ std::string TextPacket::str() const {
 
 std::expected<TextPacket, TextPacket::ParseError> TextPacket::parse(const std::span<const char>& buffer)
 {
-	if (buffer.size() < TextPacket::PACKET_END.size() + 2)
-		return std::unexpected(ParseError::INCOMPLETE);
-
-	if (buffer.front() != '\\')
+	if (buffer.front() != '\\' || buffer.back() != '\\')
 		return std::unexpected(ParseError::INVALID);
 
 	const auto values = buffer
@@ -47,23 +44,13 @@ std::expected<TextPacket, TextPacket::ParseError> TextPacket::parse(const std::s
 		| std::ranges::to<std::vector>()
 	;
 
-	if (values.size() < 2)
+	if (values.size() < 1)
 		return std::unexpected(ParseError::INCOMPLETE);
-
-	if (values.back().first != "final") {
-		// packet always needs to end with `\final\`
-		return std::unexpected(ParseError::INVALID);
-	}
-	else if (!values.back().second.empty()) {
-		// the `\final\` key is not expected to have a value
-		return std::unexpected(ParseError::INVALID);
-	}
 
 	return TextPacket{
 		.type = values.front().first,
 		.values = values
 			| std::views::drop(1)
-			| std::views::take(values.size() - 2) // take all values until (and excluding) `\final\`, hopefully this can be replaced with std::views::drop_last in the future
 			| std::ranges::to<std::map>()
 	};
 }

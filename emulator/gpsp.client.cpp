@@ -1,6 +1,6 @@
 #include "gpsp.client.h"
 #include "textpacket.h"
-#include "database.h"
+#include "playerdb.h"
 #include "utils.h"
 #include <format>
 #include <print>
@@ -8,7 +8,7 @@
 #include <ranges>
 using namespace gamespy;
 
-SearchClient::SearchClient(boost::asio::ip::tcp::socket socket, Database& db)
+SearchClient::SearchClient(boost::asio::ip::tcp::socket socket, PlayerDB& db)
 	: m_Socket(std::move(socket)), m_DB(db)
 {
 
@@ -44,7 +44,7 @@ boost::asio::awaitable<void> SearchClient::HandleRetrieveProfiles(const TextPack
 	}
 
 	const auto email = emailIter->second | std::views::transform((int(*)(int))std::tolower) | std::ranges::to<std::string>();
-	auto players = m_DB.GetPlayerByMailAndPassword(email, passwordMD5);
+	auto players = co_await m_DB.GetPlayerByMailAndPassword(email, passwordMD5);
 	if (players.empty())
 		co_await m_Socket.async_send(boost::asio::buffer(R"(\error\\err\551\fatal\\errmsg\Unable to get any associated profiles.\id\1\final\)"), boost::asio::use_awaitable);
 	else {
@@ -73,9 +73,9 @@ boost::asio::awaitable<void> SearchClient::HandleProfileExists(const TextPacket&
 		co_return;
 	}
 	
-	if (m_DB.HasPlayer(name)) {
-		auto playerData = m_DB.GetPlayerByName(name);
-		auto response = std::format(R"(\cur\0\pid\{}\final\)", playerData.GetProfileID());
+	if (co_await m_DB.HasPlayer(name)) {
+		auto playerData = co_await m_DB.GetPlayerByName(name);
+		auto response = std::format(R"(\cur\0\pid\{}\final\)", playerData->GetProfileID());
 		co_await m_Socket.async_send(boost::asio::buffer(response), boost::asio::use_awaitable);
 	}
 	else {
@@ -92,6 +92,7 @@ boost::asio::awaitable<void> SearchClient::Process()
 		if (error)
 			break;
 		
+		auto theSize = buff.size();
 		auto packet = TextPacket::parse(std::span{ boost::asio::buffer_cast<const char*>(buff.data()), buff.size() });
 		if (!packet) {
 			std::println("[search] failed to parse packet");

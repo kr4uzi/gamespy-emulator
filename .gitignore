@@ -362,13 +362,3 @@ MigrationBackup/
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
 /vcpkg_installed
-/emulator/._game_list.tsv
-/emulator/._game_params.cfg
-/emulator/._gs_emulator.sqlite3
-/emulator/._schema_sqlite.sql
-/.DS_Store
-/._.DS_Store
-/._game_list.tsv
-/._vcpkg.json
-/emulator/._game_battlefield2.sqlite3
-/._README.md

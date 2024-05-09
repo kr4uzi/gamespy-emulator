@@ -1,10 +1,12 @@
 {
   "dependencies": [
     "boost-asio",
+    "boost-beast",
     "boost-crc",
     "boost-iterator",
     "boost-serialization",
+    "boost-url",
     "sqlite3",
-    "boost-beast"
+    "boost-signals2"
   ]
 }

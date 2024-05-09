@@ -13,12 +13,6 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
-    <Filter Include="Source Files\serverbrowser">
-      <UniqueIdentifier>{4b4e76cd-edea-4999-a8bf-f11600a0ace2}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Header Files\serverbrowser">
-      <UniqueIdentifier>{83854c5f-804c-485d-ba7a-653dfcfec6c0}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Source Files\crypto">
       <UniqueIdentifier>{cf48ad90-f768-493b-9a83-9f1748859091}</UniqueIdentifier>
     </Filter>
@@ -46,25 +40,28 @@
     <Filter Include="Header Files\http">
       <UniqueIdentifier>{a1c5de9a-449d-4f0b-b891-fbc379341b11}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source Files\http">
+      <UniqueIdentifier>{fc639f77-11a1-4ad7-a01d-8a3c37fb4275}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\browsing">
+      <UniqueIdentifier>{83854c5f-804c-485d-ba7a-653dfcfec6c0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\browsing">
+      <UniqueIdentifier>{4b4e76cd-edea-4999-a8bf-f11600a0ace2}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="utils.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="http.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="asio.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="ms.client.h">
-      <Filter>Header Files\serverbrowser</Filter>
+      <Filter>Header Files\browsing</Filter>
     </ClInclude>
     <ClInclude Include="ms.h">
-      <Filter>Header Files\serverbrowser</Filter>
-    </ClInclude>
-    <ClInclude Include="sl_request.h">
-      <Filter>Header Files\serverbrowser</Filter>
+      <Filter>Header Files\browsing</Filter>
     </ClInclude>
     <ClInclude Include="sapphire.h">
       <Filter>Header Files\crypto</Filter>
@@ -72,13 +69,10 @@
     <ClInclude Include="md5.h">
       <Filter>Header Files\crypto</Filter>
     </ClInclude>
-    <ClInclude Include="database.sqlite.h">
+    <ClInclude Include="playerdb.sqlite.h">
       <Filter>Header Files\database</Filter>
     </ClInclude>
-    <ClInclude Include="database.h">
-      <Filter>Header Files\database</Filter>
-    </ClInclude>
-    <ClInclude Include="database.memory.h">
+    <ClInclude Include="playerdb.h">
       <Filter>Header Files\database</Filter>
     </ClInclude>
     <ClInclude Include="dns.h">
@@ -100,16 +94,34 @@
       <Filter>Header Files\login</Filter>
     </ClInclude>
     <ClInclude Include="master.h">
-      <Filter>Header Files\serverbrowser</Filter>
+      <Filter>Header Files\browsing</Filter>
     </ClInclude>
     <ClInclude Include="qr.h">
-      <Filter>Header Files\serverbrowser</Filter>
-    </ClInclude>
-    <ClInclude Include="gs_query_parse.h">
-      <Filter>Header Files\serverbrowser</Filter>
+      <Filter>Header Files\browsing</Filter>
     </ClInclude>
     <ClInclude Include="textpacket.h">
       <Filter>Header Files\login</Filter>
+    </ClInclude>
+    <ClInclude Include="http.h">
+      <Filter>Header Files\http</Filter>
+    </ClInclude>
+    <ClInclude Include="http.client.h">
+      <Filter>Header Files\http</Filter>
+    </ClInclude>
+    <ClInclude Include="bf2web.h">
+      <Filter>Header Files\http</Filter>
+    </ClInclude>
+    <ClInclude Include="sqlite.h">
+      <Filter>Header Files\database</Filter>
+    </ClInclude>
+    <ClInclude Include="task.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="gamedb.h">
+      <Filter>Header Files\database</Filter>
+    </ClInclude>
+    <ClInclude Include="key.h">
+      <Filter>Header Files\browsing</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -119,17 +131,11 @@
     <ClCompile Include="utils.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="http.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="ms.client.cpp">
-      <Filter>Source Files\serverbrowser</Filter>
+      <Filter>Source Files\browsing</Filter>
     </ClCompile>
     <ClCompile Include="ms.cpp">
-      <Filter>Source Files\serverbrowser</Filter>
-    </ClCompile>
-    <ClCompile Include="sl_request.cpp">
-      <Filter>Source Files\serverbrowser</Filter>
+      <Filter>Source Files\browsing</Filter>
     </ClCompile>
     <ClCompile Include="md5.cpp">
       <Filter>Source Files\crypto</Filter>
@@ -137,13 +143,10 @@
     <ClCompile Include="sapphire.cpp">
       <Filter>Source Files\crypto</Filter>
     </ClCompile>
-    <ClCompile Include="database.memory.cpp">
+    <ClCompile Include="playerdb.cpp">
       <Filter>Source Files\database</Filter>
     </ClCompile>
-    <ClCompile Include="database.cpp">
-      <Filter>Source Files\database</Filter>
-    </ClCompile>
-    <ClCompile Include="database.sqlite.cpp">
+    <ClCompile Include="playerdb.sqlite.cpp">
       <Filter>Source Files\database</Filter>
     </ClCompile>
     <ClCompile Include="gpcm.cpp">
@@ -165,16 +168,31 @@
       <Filter>Source Files\dns</Filter>
     </ClCompile>
     <ClCompile Include="master.cpp">
-      <Filter>Source Files\serverbrowser</Filter>
-    </ClCompile>
-    <ClCompile Include="gs_query_parse.cpp">
-      <Filter>Source Files\serverbrowser</Filter>
+      <Filter>Source Files\browsing</Filter>
     </ClCompile>
     <ClCompile Include="qr.cpp">
-      <Filter>Source Files\serverbrowser</Filter>
+      <Filter>Source Files\browsing</Filter>
     </ClCompile>
     <ClCompile Include="textpacket.cpp">
       <Filter>Source Files\login</Filter>
+    </ClCompile>
+    <ClCompile Include="http.cpp">
+      <Filter>Source Files\http</Filter>
+    </ClCompile>
+    <ClCompile Include="http.client.cpp">
+      <Filter>Source Files\http</Filter>
+    </ClCompile>
+    <ClCompile Include="bf2web.cpp">
+      <Filter>Source Files\http</Filter>
+    </ClCompile>
+    <ClCompile Include="sqlite.cpp">
+      <Filter>Source Files\database</Filter>
+    </ClCompile>
+    <ClCompile Include="gamedb.cpp">
+      <Filter>Source Files\database</Filter>
+    </ClCompile>
+    <ClCompile Include="key.cpp">
+      <Filter>Source Files\browsing</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>

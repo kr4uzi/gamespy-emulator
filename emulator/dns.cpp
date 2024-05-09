@@ -1,6 +1,5 @@
 #include "dns.h"
 #include "dns_details.h"
-#include "database.h"
 #include <array>
 #include <print>
 using boost::asio::ip::udp;
@@ -40,7 +39,7 @@ void HandlePacket(dns::dns_packet& packet)
 	packet.recursion_available = false;
 }
 
-DNSServer::DNSServer(boost::asio::io_context& context, Database& db)
+DNSServer::DNSServer(boost::asio::io_context& context, GameDB& db)
 	: m_Socket(context, udp::endpoint(udp::v6(), PORT)), m_DB(db)
 {
 	std::println("[dns] listening on {} for *.gamespy.com", PORT);

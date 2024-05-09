@@ -1,10 +1,12 @@
 #include "http.h"
+#include "http.client.h"
 #include <print>
-//#include <boost/beast/http.hpp>
+#include "gamedb.h"
+
 using namespace gamespy;
 
-HttpServer::HttpServer(boost::asio::io_context& context)
-	: m_Acceptor(context, boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v4(), 80))
+HttpServer::HttpServer(boost::asio::io_context& context, GameDB& db)
+	: m_Acceptor{ context, boost::asio::ip::tcp::endpoint{ boost::asio::ip::tcp::v4(), 80 } }, m_DB{ db }
 {
 	std::println("[http] starting up: {} TCP", 80);
 }
@@ -27,8 +29,11 @@ boost::asio::awaitable<void> HttpServer::AcceptClients()
 
 boost::asio::awaitable<void> HttpServer::HandleIncoming(boost::asio::ip::tcp::socket socket)
 {
-	auto buffer = std::array<char, 1024>{};
-	const auto &[error, length] = co_await socket.async_read_some(boost::asio::buffer(buffer), boost::asio::as_tuple(boost::asio::use_awaitable));
-	std::println("#{}#", std::string_view(buffer.data(), length));
-	co_return;
+	try {
+		auto client = HttpClient{ std::move(socket), m_DB };
+		co_await client.Run();
+	}
+	catch (const std::exception& e) {
+		std::println("[http] connection failed {}", e.what());
+	}
 }

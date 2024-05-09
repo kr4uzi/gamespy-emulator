@@ -2,11 +2,14 @@
 #include "asio.h"
 
 namespace gamespy {
+	class GameDB;
+
 	class HttpServer {
 		boost::asio::ip::tcp::acceptor m_Acceptor;
+		GameDB& m_DB;
 
 	public:
-		HttpServer(boost::asio::io_context& context);
+		HttpServer(boost::asio::io_context& context,GameDB& db);
 		~HttpServer();
 
 		boost::asio::awaitable<void> AcceptClients();

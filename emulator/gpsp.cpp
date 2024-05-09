@@ -4,7 +4,7 @@
 #include <utility>
 using namespace gamespy;
 
-SearchServer::SearchServer(boost::asio::io_context& context, Database& db)
+SearchServer::SearchServer(boost::asio::io_context& context, PlayerDB& db)
 	: m_Acceptor(context, boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v4(), PORT)), m_DB(db)
 {
 	std::println("[search] starting up: {} TCP", PORT);
@@ -31,6 +31,12 @@ boost::asio::awaitable<void> SearchServer::AcceptClients()
 
 boost::asio::awaitable<void> SearchServer::HandleIncoming(boost::asio::ip::tcp::socket socket)
 {
-	SearchClient client(std::move(socket), m_DB);
-	co_await client.Process();
+	auto addr = socket.remote_endpoint().address().to_string();
+	try {
+		SearchClient client(std::move(socket), m_DB);
+		co_await client.Process();
+	}
+	catch (const std::exception& e) {
+		std::println("[gpsp][error]{} - {}", addr, e.what());
+	}
 }

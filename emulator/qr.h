@@ -4,6 +4,7 @@
 #include <vector>
 #include <utility>
 #include <string>
+#include <map>
 #include <expected>
 #include <span>
 
@@ -30,10 +31,38 @@ namespace gamespy {
 			PREQUERY_IP_VERIFY = 0x09
 		};
 
-		Type type;
-		std::array<std::uint8_t, 4> instance;
-		std::vector<std::pair<std::string, std::string>> values;
+		const Type type;
+		const std::array<std::uint8_t, 4> instance;
+		const std::vector<std::uint8_t> data;
 
 		static std::expected<QRPacket, ParseError> Parse(const std::span<const std::uint8_t>& buffer);
+
+	protected:
+		/*QRPacket(Type type, decltype(instance) instance, decltype(data) data)
+			: type{ type }, instance{ instance }, data{ data }
+		{
+
+		}*/
+	};
+
+	struct QRHeartbeatPacket : QRPacket
+	{
+		const std::map<std::string, std::string> server;
+		const std::vector<std::string> playerKeys;
+		const std::vector<std::vector<std::string>> playerValues;
+		const std::vector<std::string> teamKeys;
+		const std::vector<std::vector<std::string>> teamValues;
+
+		static std::expected<QRHeartbeatPacket, ParseError> Parse(const QRPacket& packet);
+
+	private:
+		using QRPacket::Parse;
+		using QRPacket::data;
+
+		/*QRHeartbeatPacket(Type type, decltype(instance) instance, decltype(server) server, decltype(playerKeys) playerKeys, decltype(playerValues) playerValues, decltype(teamKeys) teamKeys, decltype(teamValues) teamValues)
+			: QRPacket{ type, instance, {} }, server{ server }, playerKeys{ playerKeys }, playerValues{ playerValues }, teamKeys{ teamKeys }, teamValues{ teamValues }
+		{
+
+		}*/
 	};
 }

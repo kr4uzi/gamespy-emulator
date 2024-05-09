@@ -1,6 +1,6 @@
 #pragma once
 #include "asio.h"
-#include "database.h"
+#include "playerdb.h"
 #include <optional>
 #include <string>
 
@@ -10,7 +10,7 @@ namespace gamespy {
 		boost::asio::ip::tcp::socket m_Socket;
 		boost::asio::deadline_timer m_HeartBeatTimer;
 
-		Database& m_DB;
+		PlayerDB& m_DB;
 		std::optional<PlayerData> m_PlayerData;
 		std::string m_ServerChallenge;
 		bool m_ProfileDataSent = false;
@@ -30,7 +30,7 @@ namespace gamespy {
 		LoginClient(LoginClient&& rhs) = default;
 		LoginClient& operator=(LoginClient&& rhs) = default;
 
-		LoginClient(boost::asio::ip::tcp::socket socket, Database& db);
+		LoginClient(boost::asio::ip::tcp::socket socket, PlayerDB& db);
 		~LoginClient();
 
 		boost::asio::awaitable<void> Process();

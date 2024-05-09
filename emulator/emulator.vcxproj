@@ -176,14 +176,17 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="asio.h" />
-    <ClInclude Include="database.h" />
-    <ClInclude Include="database.memory.h" />
-    <ClInclude Include="database.sqlite.h" />
+    <ClInclude Include="bf2web.h" />
+    <ClInclude Include="key.h" />
+    <ClInclude Include="playerdb.h" />
+    <ClInclude Include="playerdb.sqlite.h" />
     <ClInclude Include="dns.h" />
     <ClInclude Include="dns_details.h" />
+    <ClInclude Include="gamedb.h" />
     <ClInclude Include="gpcm.client.h" />
     <ClInclude Include="gpsp.client.h" />
     <ClInclude Include="gpsp.h" />
+    <ClInclude Include="http.client.h" />
     <ClInclude Include="http.h" />
     <ClInclude Include="master.h" />
     <ClInclude Include="md5.h" />
@@ -191,23 +194,25 @@
     <ClInclude Include="ms.h" />
     <ClInclude Include="qr.h" />
     <ClInclude Include="sapphire.h" />
-    <ClInclude Include="sl_request.h" />
-    <ClInclude Include="gs_query_parse.h" />
+    <ClInclude Include="sqlite.h" />
+    <ClInclude Include="task.h" />
     <ClInclude Include="textpacket.h" />
     <ClInclude Include="utils.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="database.cpp" />
-    <ClCompile Include="database.memory.cpp" />
-    <ClCompile Include="database.sqlite.cpp" />
+    <ClCompile Include="bf2web.cpp" />
+    <ClCompile Include="key.cpp" />
+    <ClCompile Include="playerdb.cpp" />
+    <ClCompile Include="playerdb.sqlite.cpp" />
     <ClCompile Include="dns.cpp" />
     <ClCompile Include="dns_details.cpp" />
+    <ClCompile Include="gamedb.cpp" />
     <ClCompile Include="gpcm.client.cpp" />
     <ClCompile Include="gpcm.cpp" />
     <ClInclude Include="gpcm.h" />
     <ClCompile Include="gpsp.client.cpp" />
     <ClCompile Include="gpsp.cpp" />
-    <ClCompile Include="gs_query_parse.cpp" />
+    <ClCompile Include="http.client.cpp" />
     <ClCompile Include="http.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="master.cpp" />
@@ -216,7 +221,7 @@
     <ClCompile Include="ms.cpp" />
     <ClCompile Include="qr.cpp" />
     <ClCompile Include="sapphire.cpp" />
-    <ClCompile Include="sl_request.cpp" />
+    <ClCompile Include="sqlite.cpp" />
     <ClCompile Include="textpacket.cpp" />
     <ClCompile Include="utils.cpp" />
   </ItemGroup>

@@ -10,7 +10,7 @@ using namespace gamespy;
 
 using namespace std::string_literals;
 
-LoginClient::LoginClient(boost::asio::ip::tcp::socket socket, Database& db)
+LoginClient::LoginClient(boost::asio::ip::tcp::socket socket, PlayerDB& db)
 	: m_Socket(std::move(socket)), m_HeartBeatTimer(m_Socket.get_executor()), m_DB(db)
 {
 
@@ -64,13 +64,13 @@ boost::asio::awaitable<void> LoginClient::HandleLogin(const TextPacket& packet)
 		co_return;
 	}
 		
-	if (!m_DB.HasPlayer(nameIter->second)) {
+	if (!co_await m_DB.HasPlayer(nameIter->second)) {
 		co_await m_Socket.async_send(boost::asio::buffer(R"(\error\\err\265\fatal\\errmsg\Username [)" + std::string{ nameIter->second } + R"(] doesn't exist!\id\1\final\)"), boost::asio::use_awaitable);
 		co_return;
 	}
 
-	auto player = m_DB.GetPlayerByName(nameIter->second);
-	if (responseIter->second != utils::generate_challenge(nameIter->second, player.password, clientChallengeIter->second, m_ServerChallenge)) {
+	auto player = co_await m_DB.GetPlayerByName(nameIter->second);
+	if (responseIter->second != utils::generate_challenge(nameIter->second, player->password, clientChallengeIter->second, m_ServerChallenge)) {
 		co_await m_Socket.async_send(boost::asio::buffer(R"(\error\\err\260\fatal\\errmsg\The password provided is incorrect.\id\1\final\)"s), boost::asio::use_awaitable);
 		co_return;
 	}
@@ -81,9 +81,9 @@ boost::asio::awaitable<void> LoginClient::HandleLogin(const TextPacket& packet)
 	session.process_bytes(nameIter->second.data(), nameIter->second.length());
 	m_PlayerData->session = session.checksum();
 
-	auto proof = utils::generate_challenge(m_PlayerData->name, player.password, m_ServerChallenge, clientChallengeIter->second);
+	auto proof = utils::generate_challenge(m_PlayerData->name, player->password, m_ServerChallenge, clientChallengeIter->second);
 	auto lt = utils::random_string("0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ][", 22);
-	auto response = std::format(R"(\lc\2\sesskey\{}\proof\{}\userid\{}\profileid\{}\uniquenick\{}\lt\{}__\id\1\final\)", m_PlayerData->session, proof, player.GetUserID(), player.GetProfileID(), player.name, lt);
+	auto response = std::format(R"(\lc\2\sesskey\{}\proof\{}\userid\{}\profileid\{}\uniquenick\{}\lt\{}__\id\1\final\)", m_PlayerData->session, proof, player->GetUserID(), player->GetProfileID(), player->name, lt);
 	co_await m_Socket.async_send(boost::asio::buffer(response), boost::asio::use_awaitable);
 
 	//boost::asio::co_spawn(m_Socket.get_executor(), KeepAliveClient(), boost::asio::detached);
@@ -107,7 +107,7 @@ boost::asio::awaitable<void> LoginClient::HandleNewUser(const TextPacket& packet
 		co_await m_Socket.async_send(boost::asio::buffer(R"(\error\\err\0\fatal\\errmsg\Invalid Query!\id\1\final\)"), boost::asio::use_awaitable);
 	}
 
-	if (m_DB.HasPlayer(nameIter->second)) {
+	if (co_await m_DB.HasPlayer(nameIter->second)) {
 		co_await m_Socket.async_send(boost::asio::buffer(R"(\error\\err\516\fatal\\errmsg\This account name is already in use!\id\1\final\)"s), boost::asio::use_awaitable);
 		co_return;
 	}
@@ -119,7 +119,7 @@ boost::asio::awaitable<void> LoginClient::HandleNewUser(const TextPacket& packet
 		co_await m_Socket.async_send(boost::asio::buffer(R"(\error\\err\0\fatal\\errmsg\The password is too long, must be 30 characters at most!\id\1\final\)"), boost::asio::use_awaitable);
 	else {
 		m_PlayerData.emplace(nameIter->second, emailIter->second, utils::md5(password), "??");
-		m_DB.CreatePlayer(*m_PlayerData);
+		co_await m_DB.CreatePlayer(*m_PlayerData);
 		if (!m_DB.HasError()) {
 			auto response = std::format(R"(\nur\\userid\{}\profileid\{}\id\1\final\)", m_PlayerData->GetUserID(), m_PlayerData->GetProfileID());
 			co_await m_Socket.async_send(boost::asio::buffer(response), boost::asio::use_awaitable);
@@ -151,7 +151,7 @@ boost::asio::awaitable<void> LoginClient::HandleUpdateProfile(const TextPacket& 
 		if (countryIter != packet.values.end()) {
 			auto oldCountry = m_PlayerData->country;
 			m_PlayerData->country = countryIter->second | std::views::transform((int(*)(int))std::toupper) | std::ranges::to<std::string>();
-			m_DB.UpdatePlayer(*m_PlayerData);
+			co_await m_DB.UpdatePlayer(*m_PlayerData);
 			if (m_DB.HasError()) {
 				m_PlayerData->country = oldCountry;
 				co_await m_Socket.async_send(boost::asio::buffer(R"(\error\\err\0\fatal\\errmsg\Error updating account!\id\1\final\)"s), boost::asio::use_awaitable);

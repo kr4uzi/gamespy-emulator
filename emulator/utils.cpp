@@ -130,15 +130,6 @@ std::string utils::generate_challenge(const std::string_view& name, const std::s
 	return md5(challenge);
 }
 
-void utils::gs_xor(std::span<std::uint8_t>& message)
-{
-	static constexpr auto gamespy = std::to_array("gamespy");
-
-	decltype(gamespy)::size_type i = 0;
-	for (auto& c : message)
-		c ^= gamespy[i++ % gamespy.size()];
-}
-
 std::string utils::md5(const std::string_view& text)
 {
 	const ::md5 hash(text.begin(), text.end());
