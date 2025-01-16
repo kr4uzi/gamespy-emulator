@@ -43,10 +43,10 @@
     <Filter Include="Source Files\http">
       <UniqueIdentifier>{fc639f77-11a1-4ad7-a01d-8a3c37fb4275}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Header Files\browsing">
+    <Filter Include="Header Files\gamespy">
       <UniqueIdentifier>{83854c5f-804c-485d-ba7a-653dfcfec6c0}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Source Files\browsing">
+    <Filter Include="Source Files\gamespy">
       <UniqueIdentifier>{4b4e76cd-edea-4999-a8bf-f11600a0ace2}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
@@ -58,10 +58,10 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="ms.client.h">
-      <Filter>Header Files\browsing</Filter>
+      <Filter>Header Files\gamespy</Filter>
     </ClInclude>
     <ClInclude Include="ms.h">
-      <Filter>Header Files\browsing</Filter>
+      <Filter>Header Files\gamespy</Filter>
     </ClInclude>
     <ClInclude Include="sapphire.h">
       <Filter>Header Files\crypto</Filter>
@@ -94,10 +94,10 @@
       <Filter>Header Files\login</Filter>
     </ClInclude>
     <ClInclude Include="master.h">
-      <Filter>Header Files\browsing</Filter>
+      <Filter>Header Files\gamespy</Filter>
     </ClInclude>
     <ClInclude Include="qr.h">
-      <Filter>Header Files\browsing</Filter>
+      <Filter>Header Files\gamespy</Filter>
     </ClInclude>
     <ClInclude Include="textpacket.h">
       <Filter>Header Files\login</Filter>
@@ -121,7 +121,22 @@
       <Filter>Header Files\database</Filter>
     </ClInclude>
     <ClInclude Include="key.h">
-      <Filter>Header Files\browsing</Filter>
+      <Filter>Header Files\gamespy</Filter>
+    </ClInclude>
+    <ClInclude Include="playerdb.mysql.h">
+      <Filter>Header Files\database</Filter>
+    </ClInclude>
+    <ClInclude Include="config.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="server.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="stats.h">
+      <Filter>Header Files\gamespy</Filter>
+    </ClInclude>
+    <ClInclude Include="stats.client.h">
+      <Filter>Header Files\gamespy</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -132,10 +147,10 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="ms.client.cpp">
-      <Filter>Source Files\browsing</Filter>
+      <Filter>Source Files\gamespy</Filter>
     </ClCompile>
     <ClCompile Include="ms.cpp">
-      <Filter>Source Files\browsing</Filter>
+      <Filter>Source Files\gamespy</Filter>
     </ClCompile>
     <ClCompile Include="md5.cpp">
       <Filter>Source Files\crypto</Filter>
@@ -168,10 +183,10 @@
       <Filter>Source Files\dns</Filter>
     </ClCompile>
     <ClCompile Include="master.cpp">
-      <Filter>Source Files\browsing</Filter>
+      <Filter>Source Files\gamespy</Filter>
     </ClCompile>
     <ClCompile Include="qr.cpp">
-      <Filter>Source Files\browsing</Filter>
+      <Filter>Source Files\gamespy</Filter>
     </ClCompile>
     <ClCompile Include="textpacket.cpp">
       <Filter>Source Files\login</Filter>
@@ -192,7 +207,22 @@
       <Filter>Source Files\database</Filter>
     </ClCompile>
     <ClCompile Include="key.cpp">
-      <Filter>Source Files\browsing</Filter>
+      <Filter>Source Files\gamespy</Filter>
+    </ClCompile>
+    <ClCompile Include="playerdb.mysql.cpp">
+      <Filter>Source Files\database</Filter>
+    </ClCompile>
+    <ClCompile Include="config.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="server.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="stats.cpp">
+      <Filter>Source Files\gamespy</Filter>
+    </ClCompile>
+    <ClCompile Include="stats.client.cpp">
+      <Filter>Source Files\gamespy</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>

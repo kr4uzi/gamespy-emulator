@@ -150,7 +150,15 @@ std::expected<QRHeartbeatPacket, QRPacket::ParseError> QRHeartbeatPacket::Parse(
 				};
 			}
 		}
-		
+		else if (end == packet.data.end()) {
+			// heartbeat without players/teams is valid
+			return QRHeartbeatPacket{
+				packet.type,
+				packet.instance,
+				{},
+				map->data
+			};
+		}
 	}
 	
 	return std::unexpected(QRPacket::ParseError::TOO_SMALL);

@@ -14,8 +14,8 @@
 #include <boost/url.hpp>
 using namespace gamespy;
 
-HttpClient::HttpClient(boost::asio::ip::tcp::socket nSocket, GameDB& db)
-	: m_Socket{ std::move(nSocket) }, m_DB{ db }
+HttpClient::HttpClient(boost::asio::ip::tcp::socket nSocket)
+	: m_Socket{ std::move(nSocket) }
 {
 
 }
@@ -40,9 +40,22 @@ boost::asio::awaitable<void> HttpClient::Run()
 	if (error)
 		co_return;
 
+	auto uri = boost::urls::parse_origin_form(request.target());
+	std::string method;
+	switch (request.method()) {
+	case boost::beast::http::verb::get:
+		method = "GET"; break;
+	case boost::beast::http::verb::head:
+		method = "HEAD"; break;
+	case boost::beast::http::verb::post:
+		method = "POST"; break;
+	default:
+		method = std::to_string((int)request.method());
+		break;
+	}
+
 	if (request.method() == boost::beast::http::verb::get) {
 		const auto& host = request[boost::beast::http::field::host];
-		auto uri = boost::urls::parse_origin_form(request.target());
 		if (!uri) co_return;
 
 		auto path = uri->encoded_path();
@@ -61,6 +74,37 @@ boost::asio::awaitable<void> HttpClient::Run()
 			}
 		}
 		else if (host == "BF2Web.gamespy.com") {
+			using rtype = bf2web::response::type;
+			if (path == "/ASP/getbackendinfo.aspx") {
+				auto bf2resp = bf2web::response{};
+				bf2resp.Append(rtype::HEADER, "ver", "rnk", "now");
+				bf2resp.Append(rtype::DATA, "0.1", "1", std::to_string(std::time(nullptr)));
+				bf2resp.Append(rtype::HEADER, "id", "kit", "name", "descr");
+				bf2resp.Append(rtype::DATA, "11", "0", "Chsht_protecta", "Protecta shotgun with slugs");
+				bf2resp.Append(rtype::DATA, "22", "1", "Usrif_g3a3", "H&K G3");
+				bf2resp.Append(rtype::DATA, "33", "2", "USSHT_Jackhammer", "Jackhammer shotgun");
+				bf2resp.Append(rtype::DATA, "44", "3", "Usrif_sa80", "SA-80");
+				bf2resp.Append(rtype::DATA, "55", "4", "Usrif_g36c", "G36C");
+				bf2resp.Append(rtype::DATA, "66", "5", "RULMG_PKM", "PKM");
+				bf2resp.Append(rtype::DATA, "77", "6", "USSNI_M95_Barret", "Barret M82A2 (.50 cal rifle)");
+				bf2resp.Append(rtype::DATA, "88", "1", "sasrif_fn2000", "FN2000");
+				bf2resp.Append(rtype::DATA, "99", "2", "sasrif_mp7", "MP-7");
+				bf2resp.Append(rtype::DATA, "111", "3", "sasrif_g36e", "G36E");
+				bf2resp.Append(rtype::DATA, "222", "4", "usrif_fnscarl", "FN SCAR - L");
+				bf2resp.Append(rtype::DATA, "333", "5", "sasrif_mg36", "MG36");
+				bf2resp.Append(rtype::DATA, "444", "0", "eurif_fnp90", "P90");
+				bf2resp.Append(rtype::DATA, "555", "6", "gbrif_l96a1", "L96A1");
+
+				auto response = boost::beast::http::response<boost::beast::http::string_body>{};
+				response.version(request.version());
+				response.keep_alive(false);
+				response.result(boost::beast::http::status::ok);
+				response.body() += bf2resp.ToString();
+				co_await boost::beast::http::async_write(m_Socket, response, boost::asio::as_tuple(boost::asio::use_awaitable));
+
+				co_return;
+			}
+
 			unsigned long pid{ 0 };
 			const auto& params = uri->params();
 			if (auto iter = params.find("pid"); iter != params.end()) {
@@ -71,7 +115,7 @@ boost::asio::awaitable<void> HttpClient::Run()
 					co_return;
 			}
 
-			using rtype = bf2web::response::type;
+			
 			if (pid == 0) {
 				co_return;
 			}

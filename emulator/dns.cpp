@@ -56,7 +56,9 @@ boost::asio::awaitable<void> DNSServer::AcceptConnections()
 	while (m_Socket.is_open()) {
 		udp::endpoint client;
 		const auto& [error, length] = co_await m_Socket.async_receive_from(boost::asio::buffer(buff), client, boost::asio::as_tuple(boost::asio::use_awaitable));
-		if (error || length == 0)
+		if (error)
+			break;
+		else if (length == 0)
 			continue;
 
 		auto packet = dns::dns_packet::from_bytes(buff);

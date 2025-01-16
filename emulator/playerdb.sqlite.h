@@ -8,19 +8,9 @@ namespace gamespy {
 		sqlite::db m_DB;
 		std::string m_LastError;
 
-		struct params_t
-		{
-			std::filesystem::path db_file;
-			std::filesystem::path sql_file;
-		};
-
 	public:
-		PlayerDBSQLite(const params_t& params);
+		PlayerDBSQLite(const std::filesystem::path& dbFile);
 		~PlayerDBSQLite();
-
-		virtual bool HasError() const noexcept override;
-		virtual std::string GetError() const noexcept override;
-		virtual void ClearError() noexcept override;
 
 		virtual task<bool> HasPlayer(const std::string_view& name) override;
 		virtual task<std::optional<PlayerData>> GetPlayerByName(const std::string_view& name) override;

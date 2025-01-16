@@ -24,12 +24,15 @@ std::string TextPacket::str() const {
 
 std::expected<TextPacket, TextPacket::ParseError> TextPacket::parse(const std::span<const char>& buffer)
 {
-	if (buffer.front() != '\\' || buffer.back() != '\\')
+	if (buffer.size() < 2)
+		return std::unexpected(ParseError::INCOMPLETE);
+
+	if (buffer.front() != '\\')
 		return std::unexpected(ParseError::INVALID);
 
 	const auto values = buffer
 		| std::views::drop(1) // ignore first backslash
-		| std::views::take(buffer.size() - 1 - (buffer.back() == '\0')) // ignore null-terminator (if present)
+		| std::views::take(buffer.size() - 1 - (buffer.back() == '\0') - (buffer.back() == '\\')) // ignore first backslash and last null-terminator or slash (if present)
 		| std::views::split('\\')
 		| std::views::chunk(2)
 		| std::views::transform(

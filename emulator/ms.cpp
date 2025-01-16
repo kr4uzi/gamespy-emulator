@@ -19,7 +19,10 @@ BrowserServer::~BrowserServer()
 boost::asio::awaitable<void> BrowserServer::AcceptClients()
 {
 	while (m_Acceptor.is_open()) {
-		auto socket = co_await m_Acceptor.async_accept(boost::asio::use_awaitable);
+		auto [error, socket] = co_await m_Acceptor.async_accept(boost::asio::as_tuple(boost::asio::use_awaitable));
+		if (error)
+			break;
+
 		boost::asio::co_spawn(m_Acceptor.get_executor(), HandleIncoming(std::move(socket)), boost::asio::detached);
 	}
 }

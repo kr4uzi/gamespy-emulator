@@ -18,12 +18,15 @@ namespace gamespy {
 
 		std::string generate_challenge(const std::string_view& name, const std::string_view& md5Password, const std::string_view& localChallenge, const std::string_view& remoteChallenge);
 
-		template<typename R> requires std::ranges::range<R>
-		void gs_xor(R& message)
-		{
-			static constexpr auto gsxor = std::array{ 'g', 'a', 'm', 'e', 's', 'p', 'y' };
+		struct xor_types {
+			static constexpr auto gamespy = std::array{ 'g', 'a', 'm', 'e', 's', 'p', 'y' };
+			static constexpr auto gamespy3d = std::array{ 'G', 'a', 'm', 'e', 'S', 'p', 'y', '3', 'D' };
+		};
 
-			decltype(gsxor)::size_type i = 0;
+		template<typename R, std::size_t N> requires std::ranges::range<R>
+		void gs_xor(R& message, const std::array<char, N>& gsxor = xor_types::gamespy)
+		{
+			std::size_t i = 0;
 			for (auto& c : message)
 				c ^= gsxor[i++ % gsxor.size()];
 		}

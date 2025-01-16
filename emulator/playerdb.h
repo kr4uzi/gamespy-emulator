@@ -14,19 +14,19 @@
 
 namespace gamespy {
 	struct PlayerData {
-		std::uint32_t id = 0;
+		std::uint64_t id = 0;
 		std::string name;
 		std::string email;
 		std::string password;
 		std::string country;
 
-		std::uint32_t GetUserID() const;
-		std::uint32_t GetProfileID() const;
+		std::uint64_t GetUserID() const;
+		std::uint64_t GetProfileID() const;
 		unsigned short session = 0;
 
 		PlayerData() = default;
 		PlayerData(const std::string_view& name, const std::string_view& email, const std::string_view& password, const std::string_view& country);
-		PlayerData(std::uint32_t id, const std::string_view& name, const std::string_view& email, const std::string_view& password, const std::string_view& country);
+		PlayerData(std::uint64_t id, const std::string_view& name, const std::string_view& email, const std::string_view& password, const std::string_view& country);
 	};
 
 	class PlayerDB
@@ -34,10 +34,6 @@ namespace gamespy {
 	public:
 		PlayerDB();
 		virtual ~PlayerDB();
-
-		virtual bool HasError() const noexcept = 0;
-		virtual std::string GetError() const noexcept = 0;
-		virtual void ClearError() noexcept = 0;
 
 		virtual task<bool> HasPlayer(const std::string_view& name) = 0;
 		virtual task<std::optional<PlayerData>> GetPlayerByName(const std::string_view& name) = 0;

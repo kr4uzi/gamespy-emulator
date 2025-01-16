@@ -10,9 +10,7 @@ using namespace gamespy;
 using boost::asio::ip::udp;
 
 MasterServer::MasterServer(boost::asio::io_context& context, GameDB& db)
-	: m_Socket{ context, udp::endpoint{ udp::v4(), PORT } }, m_CleanupTimer{ context }, m_DB {
-	db
-}
+	: m_Socket{ context, udp::endpoint{ udp::v4(), PORT } }, m_CleanupTimer{ context }, m_DB { db }
 {
 	std::println("[master] starting up: {} UDP", PORT);
 	std::println("[master] (%s.available.gamespy.com)");
@@ -53,14 +51,20 @@ boost::asio::awaitable<void> MasterServer::HandleAvailable(const udp::endpoint& 
 	// the response contains a 32-bit status flag which containts only 3 possible status: 0 = available, 1 = unavailable, 2 = temporarily unavailable
 	// sample package: 0x09 0x00 0x00 0x00 0x00 0x62 0x61 0x74 0x74 0x6C 0x65 0x66 0x69 0x65 0x6C 0x64 0x32 0x00
 	//                     |   INSTANCE KEY   |  b    a    t    t    l    e    f    i    e    l    d    2  |
-	if (m_DB.HasGame(std::string{ reinterpret_cast<const char*>(packet.data.data()) }))
-		co_await m_Socket.async_send_to(boost::asio::buffer("\xFE\xFD\x09\0\0\0\0"), client, boost::asio::use_awaitable);
-	else {
-		constexpr bool permamentlyDisabled = false;
-		if (permamentlyDisabled)
+	std::string name{ reinterpret_cast<const char*>(packet.data.data()) };
+	if (m_DB.HasGame(name)) {
+		const auto& game = m_DB.GetGame(name);
+		switch (game.Data().available) {
+		case GameData::AvailableFlag::AVAILABLE:
+			co_await m_Socket.async_send_to(boost::asio::buffer("\xFE\xFD\x09\0\0\0\0"), client, boost::asio::use_awaitable);
+			break;
+		case GameData::AvailableFlag::DISABLED_TEMPORARY:
 			co_await m_Socket.async_send_to(boost::asio::buffer("\xFE\xFD\x09\0\0\0\1"), client, boost::asio::use_awaitable);
-		else
+			break;
+		case GameData::AvailableFlag::DISABLED_PREMANENTLY:
 			co_await m_Socket.async_send_to(boost::asio::buffer("\xFE\xFD\x09\0\0\0\2"), client, boost::asio::use_awaitable);
+			break;
+		}
 	}
 }
 
@@ -104,9 +108,14 @@ boost::asio::awaitable<void> MasterServer::HandleHeartbeat(const udp::endpoint& 
 	else if (!m_AwaitingValidation.contains(client)) {
 		// Note: The challenge needs to be even-sized so that the base64 encoding can be generated without padding
 		// This is required because the gamespy encoding is only base64-ish and handles the padding differently than regular base64 encoding
-		constexpr std::uint8_t backendOptions = 0;
+		
+		// Note: query challenge is used to prevent id-spoofing but this isn't yet implemented
+		enum BACKEND_OPTIONS : std::uint8_t {
+			QR2_USE_QUERY_CHALLENGE = 128
+		} backendOptions{ 0 };
+		
 		auto challenge = utils::random_string("ABCDEFGHJIKLMNOPQRSTUVWXYZ123456789", 7);
-		auto responseData = std::format("{}{:2X}{:8X}{:4X}", challenge, backendOptions, client.address().to_v4().to_uint(), client.port());
+		auto responseData = std::format("{}{:2X}{:8X}{:4X}", challenge, static_cast<int>(backendOptions), client.address().to_v4().to_uint(), client.port());
 
 		std::vector<uint8_t> response;
 		response.push_back(0xFE);
@@ -118,7 +127,7 @@ boost::asio::awaitable<void> MasterServer::HandleHeartbeat(const udp::endpoint& 
 
 		m_AwaitingValidation.emplace(client, server{ 
 			.last_update = Clock::now(),
-			.proof = utils::encode(game.GetSecretKey(), responseData), 
+			.proof = utils::encode(game.Data().secretKey, responseData), 
 			.instance = packet->instance,
 			.gamename = gamename,
 			.values = packet->server
@@ -187,7 +196,9 @@ boost::asio::awaitable<void> MasterServer::AcceptConnections()
 	while (m_Socket.is_open()) {
 		udp::endpoint client;
 		const auto [error, length] = co_await m_Socket.async_receive_from(boost::asio::buffer(buff), client, boost::asio::as_tuple(boost::asio::use_awaitable));
-		if (error || length == 0)
+		if (error)
+			break;
+		else if (length == 0)
 			continue;
 			
 		try {

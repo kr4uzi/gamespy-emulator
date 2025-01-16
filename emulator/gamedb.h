@@ -16,62 +16,31 @@
 #include <boost/signals2/signal.hpp>
 #include "task.h"
 #include "sqlite.h"
+#include "config.h"
 
 namespace gamespy {
 	using Clock = std::chrono::system_clock;
 
 	class Game {
-	public:
-		enum class KeyType {
-			STRING = 0,
-			BYTE = 1,
-			SHORT = 2
-		};
-
-		struct Param {
-			const std::string type;
-			const std::string default_value;
-		};
-
 	private:
 		sqlite::db m_DB;
-		const std::string m_Name;
-		const std::string m_Description;
-		const std::string m_SecretKey;
-		const std::uint16_t m_QueryPort;
-		std::map<std::string, Param> m_Params; // known parameter names
-		const bool m_AutoParams; // automatically add parameters
+		GameData m_Data;
+		std::set<std::string> m_GameParams; // dynamic and static (GameData) keys
 
 		// up to 254 most used values (implemented for completeness - was this used to save bandwith?)
 		std::vector<std::string> m_PopularValues;
 
 		// overrides how key-values are sent to clients (if a key is not present in this map, STRING will be used)
-		std::map<std::string, KeyType> m_KeyTypeOverrides;
+		// (this is for faster lookup when 
+		std::map<std::string, GameData::KeyType> m_KeyTypeOverrides;
 
 	public:
-		Game(std::string name, std::string description, std::string secretKey, std::uint16_t queryPort, bool autoParams = false, std::map<std::string, Param> params = {});
+		Game(GameData data);
 		std::string GetMasterServer() const; // calculates the designated master server (%s.ms%d.gamespy.com) for this game
 
-		std::string_view GetName()          const noexcept { return m_Name; }
-		std::string_view GetDescription()   const noexcept { return m_Description; }
-		std::string_view GetSecretKey()     const noexcept { return m_SecretKey; }
-		std::uint16_t    GetQueryPort()     const noexcept { return m_QueryPort; }
+		const GameData& Data() const noexcept { return m_Data; }
 
 		static bool IsValidParamName(const std::string& paramName);
-
-		KeyType GetKeyType(const std::string& key) const noexcept
-		{
-			const auto& keyTypeIter = m_KeyTypeOverrides.find(key);
-			if (keyTypeIter != m_KeyTypeOverrides.end())
-				return keyTypeIter->second;
-
-			return KeyType::STRING;
-		}
-
-		void SetKeyTypeOverrides(decltype(m_KeyTypeOverrides) keyTypeOverrides) noexcept
-		{
-			m_KeyTypeOverrides = std::move(keyTypeOverrides);
-		}
 
 		// when sending server data via key-value pairs to the clients,
 		// the list of popular-keys is first sent.
@@ -111,25 +80,6 @@ namespace gamespy {
 	class GameDB
 	{
 	public:
-		struct ParsedGame
-		{
-			const std::string_view name;
-			const std::string_view description;
-			const std::string_view secretKey;
-			const std::uint16_t queryPort;
-		};
-		static void ParseGamesTSV(const std::filesystem::path& path, std::function<bool(const ParsedGame&)> callback);
-
-		struct ParsedParameter
-		{
-			const std::string_view game;
-			const std::string_view name;
-			const std::string_view type;
-			const std::string_view default_value;
-		};
-		static void ParseServerParameters(const std::filesystem::path& path, std::function<bool(const ParsedParameter&)> callback);
-
-	public:
 		GameDB();
 		virtual ~GameDB();
 
@@ -141,15 +91,8 @@ namespace gamespy {
 	{
 		std::map<std::string, Game> m_Games;
 
-		struct params_t
-		{
-			const std::filesystem::path games_list_file;
-			const std::filesystem::path game_params_file;
-			const bool auto_params;
-		};
-
 	public:
-		GameDBSQLite(const params_t& params);
+		GameDBSQLite(const Config& config);
 		~GameDBSQLite();
 
 		virtual bool HasGame(const std::string& name) override;

@@ -7,14 +7,13 @@
 namespace gamespy
 {
 	class GameDB;
+	class PlayerDB;
 	class HttpClient
 	{
 		boost::asio::ip::tcp::socket m_Socket;
-		//sqlite::db& m_DB;
-		GameDB& m_DB;
 
 	public:
-		HttpClient(boost::asio::ip::tcp::socket socket, GameDB& db);
+		HttpClient(boost::asio::ip::tcp::socket socket);
 		~HttpClient();
 
 		boost::asio::awaitable<void> Run();

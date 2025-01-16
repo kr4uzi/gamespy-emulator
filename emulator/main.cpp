@@ -1,29 +1,50 @@
-#include "playerdb.sqlite.h"
-#include "gamedb.h"
-#include "master.h"
-#include "gpcm.h"
-#include "gpsp.h"
-#include "ms.h"
-#include "key.h"
-#include "http.h"
+#include "server.h"
 #include "asio.h"
-#include "dns.h"
+#include "config.h"
 #include <csignal>
 #include <print>
-#include <filesystem>
 #include <iostream>
+#include <boost/program_options.hpp>
+#include <boost/log/core.hpp>
+#include <boost/log/trivial.hpp>
+#include "utils.h"
 
 int main(int argc, char **argv)
 {
-	bool startDNS = true, startHTTP = true;
-	for (int i = 1; i < argc; i++) {
-		if (argv[i] == std::string_view{ "dns=0" })
-			startDNS = false;
-		else if (argv[i] == std::string_view{ "http=0" })
-			startHTTP = false;
-	}
-
 	try {
+		namespace po = boost::program_options;
+		auto options = po::options_description{ "Allowed options" };
+		options.add_options()
+			("version,v", "print version string")
+			("help", "produces this help message")
+			("create-config", po::value<std::string>(), "creates a default config file")
+			("config", po::value<std::string>(), "uses the supplied config file")
+		;
+
+		po::variables_map vm;
+		po::store(po::parse_command_line(argc, argv, options), vm);
+		po::notify(vm);
+
+		if (vm.count("help")) {
+			std::cout << options << std::endl;
+			return EXIT_SUCCESS;
+		}
+
+		if (vm.count("create-config")) {
+			gamespy::Config::CreateTemplate(vm.at("create-config").as<std::string>());
+			return EXIT_SUCCESS;
+		}
+
+		auto config = [](auto configFile) {
+			if (!configFile.empty())
+				return gamespy::Config{ configFile };
+
+			if (std::filesystem::exists("default.ini"))
+				return gamespy::Config{ "default.ini" };
+
+			return gamespy::Config{};
+		}(vm.count("config") ? vm.at("config").as<std::string>() : std::string{});
+
 		auto context = boost::asio::io_context{};
 		auto signals = boost::asio::signal_set{ context, SIGINT, SIGTERM };
 		signals.async_wait([&](auto, auto) {
@@ -31,49 +52,17 @@ int main(int argc, char **argv)
 			context.stop();
 		});
 
-		auto playerDB = std::unique_ptr<gamespy::PlayerDB>{ new gamespy::PlayerDBSQLite({
-			.db_file = "player_db.sqlite3",
-			.sql_file = "schema_sqlite.sql"
-		}) };
-
-		auto gameDB = std::unique_ptr<gamespy::GameDB>{ new gamespy::GameDBSQLite({
-			 .games_list_file = "game_list.tsv",
-			 .game_params_file = "game_params.cfg",
-			 .auto_params = true
-		}) };
-
-		// commented because this needs to check the bf2-stats authorized servers
-		//if (gameDB->HasGame("battlefield2")) {
-		//	gameDB->GetGame("battlefield2").BeforeServerAdd.connect([](auto& server) {
-		//		server.data["bf2_ranked"] = "1";
-		//	});
-		//}
-
-		auto master = gamespy::MasterServer{ context, *gameDB };
-		auto gpcm = gamespy::LoginServer{ context, *playerDB };
-		auto gpsp = gamespy::SearchServer{ context, *playerDB };
-		auto ms = gamespy::BrowserServer{ context, *gameDB };
-		auto key = gamespy::CDKeyServer{ context };
-		std::unique_ptr<gamespy::DNSServer> dns;
-		std::unique_ptr<gamespy::HttpServer> http;
-
-		if (startDNS)
-			dns.reset(new gamespy::DNSServer{ context, *gameDB });
-		
-		if (startHTTP)
-			http.reset(new gamespy::HttpServer{ context, *gameDB });
-
-		boost::asio::co_spawn(context, master.AcceptConnections(), boost::asio::detached);
-		boost::asio::co_spawn(context, gpcm.AcceptClients(), boost::asio::detached);
-		boost::asio::co_spawn(context, gpsp.AcceptClients(), boost::asio::detached);
-		boost::asio::co_spawn(context, ms.AcceptClients(), boost::asio::detached);
-		boost::asio::co_spawn(context, key.AcceptConnections(), boost::asio::detached);
-
-		if (dns)
-			boost::asio::co_spawn(context, dns->AcceptConnections(), boost::asio::detached);
-
-		if (http)
-			boost::asio::co_spawn(context, http->AcceptClients(), boost::asio::detached);
+		auto server = gamespy::Server{ config, context };
+		boost::asio::co_spawn(context, server.Run(), [](std::exception_ptr ex) {
+			if (ex) {
+				try {
+					std::rethrow_exception(ex);
+				}
+				catch (std::exception& e) {
+					std::println(std::cerr, "[exception] {}", e.what());
+				}
+			}
+		});
 
 		// strings / urls found in bf2 files
 		// http://eapusher.dice.se/image.asp?lang=English

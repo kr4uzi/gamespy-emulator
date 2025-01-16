@@ -1,22 +1,22 @@
-#include "gpcm.h"
-#include "gpcm.client.h"
+#include "stats.h"
+#include "stats.client.h"
 #include <print>
 #include <utility>
 using namespace gamespy;
 
-LoginServer::LoginServer(boost::asio::io_context& context, PlayerDB& db)
+StatsServer::StatsServer(boost::asio::io_context& context, GameDB& db)
 	: m_Acceptor{ context, boost::asio::ip::tcp::endpoint{ boost::asio::ip::tcp::v4(), PORT } }, m_DB{ db }
 {
-	std::println("[login] starting up: {} TCP", PORT);
-	std::println("[login] (gpcm.gamespy.com)");
+	std::println("[stats] starting up: {} TCP", PORT);
+	std::println("[stats] (*.gamestats.gamespy.com)");
 }
 
-LoginServer::~LoginServer()
+StatsServer::~StatsServer()
 {
-	std::println("[login] shutting down");
+	std::println("[stats] shutting down");
 }
 
-boost::asio::awaitable<void> LoginServer::AcceptClients()
+boost::asio::awaitable<void> StatsServer::AcceptClients()
 {
 	while (m_Acceptor.is_open()) {
 		auto [error, socket] = co_await m_Acceptor.async_accept(boost::asio::as_tuple(boost::asio::use_awaitable));
@@ -27,14 +27,14 @@ boost::asio::awaitable<void> LoginServer::AcceptClients()
 	}
 }
 
-boost::asio::awaitable<void> LoginServer::HandleIncoming(boost::asio::ip::tcp::socket socket)
+boost::asio::awaitable<void> StatsServer::HandleIncoming(boost::asio::ip::tcp::socket socket)
 {
 	auto addr = socket.remote_endpoint().address().to_string();
 	try {
-		LoginClient client(std::move(socket), m_DB);
+		StatsClient client(std::move(socket), m_DB);
 		co_await client.Process();
 	}
 	catch (const std::exception& e) {
-		std::println("[gpcm][error]{} - {}", addr, e.what());
+		std::println("[stats][error]{} - {}", addr, e.what());
 	}
 }

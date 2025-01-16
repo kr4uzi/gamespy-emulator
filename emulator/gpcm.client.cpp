@@ -43,7 +43,7 @@ boost::asio::awaitable<void> LoginClient::SendChallenge()
 {
 	m_ServerChallenge = utils::random_string("ABCDEFGHIJKLMNOPQRSTUVWXYZ", 10);
 
-	auto response = std::format(R"(\lc\1(\challenge\{}\id\1\final\)", m_ServerChallenge);
+	auto response = std::format(R"(\lc\1\challenge\{}\id\1\final\)", m_ServerChallenge);
 	co_await m_Socket.async_send(boost::asio::buffer(response), boost::asio::use_awaitable);
 
 	m_State = STATES::AUTHENTICATING;
@@ -52,7 +52,7 @@ boost::asio::awaitable<void> LoginClient::SendChallenge()
 boost::asio::awaitable<void> LoginClient::HandleLogin(const TextPacket& packet)
 {
 	if (m_State != STATES::AUTHENTICATING) {
-		std::print("[login] received login package in non-authenticating state");
+		std::println("[login] received login package in non-authenticating state");
 		co_return;
 	}
 
@@ -66,12 +66,14 @@ boost::asio::awaitable<void> LoginClient::HandleLogin(const TextPacket& packet)
 		
 	if (!co_await m_DB.HasPlayer(nameIter->second)) {
 		co_await m_Socket.async_send(boost::asio::buffer(R"(\error\\err\265\fatal\\errmsg\Username [)" + std::string{ nameIter->second } + R"(] doesn't exist!\id\1\final\)"), boost::asio::use_awaitable);
+		std::println("[login] unknown user: {}", nameIter->second);
 		co_return;
 	}
 
 	auto player = co_await m_DB.GetPlayerByName(nameIter->second);
 	if (responseIter->second != utils::generate_challenge(nameIter->second, player->password, clientChallengeIter->second, m_ServerChallenge)) {
 		co_await m_Socket.async_send(boost::asio::buffer(R"(\error\\err\260\fatal\\errmsg\The password provided is incorrect.\id\1\final\)"s), boost::asio::use_awaitable);
+		std::println("[login] invalid password for user: {}", nameIter->second);
 		co_return;
 	}
 	
@@ -86,9 +88,11 @@ boost::asio::awaitable<void> LoginClient::HandleLogin(const TextPacket& packet)
 	auto response = std::format(R"(\lc\2\sesskey\{}\proof\{}\userid\{}\profileid\{}\uniquenick\{}\lt\{}__\id\1\final\)", m_PlayerData->session, proof, player->GetUserID(), player->GetProfileID(), player->name, lt);
 	co_await m_Socket.async_send(boost::asio::buffer(response), boost::asio::use_awaitable);
 
-	//boost::asio::co_spawn(m_Socket.get_executor(), KeepAliveClient(), boost::asio::detached);
 	m_State = STATES::AUTHENTICATED;
-	//m_HeartBeatTimer.cancel();
+	std::println("[login] authenticated user: {}", nameIter->second);
+
+	// currently not doing keepalive / heartbeat handling as it seems unnecessary (there is no timeout in the default gamespy implementation)
+	//boost::asio::co_spawn(m_Socket.get_executor(), KeepAliveClient(), boost::asio::detached);
 }
 
 boost::asio::awaitable<void> LoginClient::HandleNewUser(const TextPacket& packet)
@@ -105,6 +109,7 @@ boost::asio::awaitable<void> LoginClient::HandleNewUser(const TextPacket& packet
 	if (nameIter == packet.values.end() || emailIter == packet.values.end() || passwordEncIter == packet.values.end()) {
 		std::println("[login] unexpected newuser packet (missing nick|email or password: {}", packet.str());
 		co_await m_Socket.async_send(boost::asio::buffer(R"(\error\\err\0\fatal\\errmsg\Invalid Query!\id\1\final\)"), boost::asio::use_awaitable);
+		co_return;
 	}
 
 	if (co_await m_DB.HasPlayer(nameIter->second)) {
@@ -120,12 +125,9 @@ boost::asio::awaitable<void> LoginClient::HandleNewUser(const TextPacket& packet
 	else {
 		m_PlayerData.emplace(nameIter->second, emailIter->second, utils::md5(password), "??");
 		co_await m_DB.CreatePlayer(*m_PlayerData);
-		if (!m_DB.HasError()) {
-			auto response = std::format(R"(\nur\\userid\{}\profileid\{}\id\1\final\)", m_PlayerData->GetUserID(), m_PlayerData->GetProfileID());
-			co_await m_Socket.async_send(boost::asio::buffer(response), boost::asio::use_awaitable);
-		}
-		else
-			co_await m_Socket.async_send(boost::asio::buffer(R"(\error\\err\0\fatal\\errmsg\Error creating account!\id\1\final\)"s), boost::asio::use_awaitable);
+		auto response = std::format(R"(\nur\\userid\{}\profileid\{}\id\1\final\)", m_PlayerData->GetUserID(), m_PlayerData->GetProfileID());
+		co_await m_Socket.async_send(boost::asio::buffer(response), boost::asio::use_awaitable);
+		std::println("[login] created new user: {}", nameIter->second);
 	}
 }
 
@@ -152,10 +154,6 @@ boost::asio::awaitable<void> LoginClient::HandleUpdateProfile(const TextPacket& 
 			auto oldCountry = m_PlayerData->country;
 			m_PlayerData->country = countryIter->second | std::views::transform((int(*)(int))std::toupper) | std::ranges::to<std::string>();
 			co_await m_DB.UpdatePlayer(*m_PlayerData);
-			if (m_DB.HasError()) {
-				m_PlayerData->country = oldCountry;
-				co_await m_Socket.async_send(boost::asio::buffer(R"(\error\\err\0\fatal\\errmsg\Error updating account!\id\1\final\)"s), boost::asio::use_awaitable);
-			}
 		}
 	}
 	else {
@@ -203,6 +201,10 @@ boost::asio::awaitable<void> LoginClient::Process()
 		}
 
 		buff.consume(buff.size());
+	}
+
+	if (m_PlayerData) {
+		std::println("[login] user disconnected: {}", m_PlayerData->name);
 	}
 }
 
