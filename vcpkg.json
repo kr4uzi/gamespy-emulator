@@ -1,12 +1,16 @@
 {
   "dependencies": [
     "boost-asio",
-    "boost-beast",
     "boost-crc",
     "boost-iterator",
+    "boost-log",
+    "boost-mysql",
+    "boost-program-options",
+    "boost-property-tree",
     "boost-serialization",
-    "boost-url",
+    "boost-signals2",
+    "openssl",
     "sqlite3",
-    "boost-signals2"
+    "detours"
   ]
 }
