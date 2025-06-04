@@ -20,23 +20,23 @@ Game::Game(GameData data)
 			__public_port INTEGER NOT NULL
 	)SQL";
 
-	for (const auto& [name, type] : m_Data.keys) {
-		if (!IsValidParamName(name))
-			throw std::runtime_error{ std::format("parameter name {} is not allowed", name) };
+	for (const auto& key : m_Data.keys) {
+		if (!IsValidParamName(key.name))
+			throw std::runtime_error{ std::format("parameter name {} is not allowed", key.name) };
 
-		m_GameParams.insert(name);
-		switch (type) {
+		m_Params.emplace(key.name, &key);
+		switch (key.type) {
 		case GameData::KeyType::STRING:
-			sql += std::format(",{} TEXT", name);
+			sql += std::format(",{} TEXT", key.name);
 			break;
 		case GameData::KeyType::BYTE:
-			sql += std::format(",{} TINYINT", name);
+			sql += std::format(",{} TINYINT", key.name);
 			break;
 		case GameData::KeyType::SHORT:
-			sql += std::format(",{} SMALLINT", name);
+			sql += std::format(",{} SMALLINT", key.name);
 			break;
 		default:
-			throw std::runtime_error{ std::format("parameter {} of invalid type {}", name, static_cast<int>(type)) };
+			throw std::runtime_error{ std::format("parameter {} of invalid type {}", key.name, static_cast<int>(key.type)) };
 		}
 	}
 
@@ -75,7 +75,7 @@ bool Game::IsValidParamName(const std::string& paramName)
 	return !paramName.starts_with("__");
 }
 
-void Game::AddOrUpdateServer(Server& server)
+task<void> Game::AddOrUpdateServer(Server& server)
 {
 	if (server.public_ip.empty() || server.public_port == 0)
 		throw std::runtime_error{ "server missing public_ip and/or public_port" };
@@ -87,7 +87,7 @@ void Game::AddOrUpdateServer(Server& server)
 	std::vector<std::string> columnsToAdd;
 	std::vector<std::string_view> valuesToAdd;
 	for (const auto& [key, value] : server.data) {
-		if (!m_GameParams.contains(key)) {
+		if (!m_Params.contains(key)) {
 			if (m_Data.autoKeys) {
 				if (!IsValidParamName(key))
 					throw std::runtime_error{ std::format("illegal column name: {}", key) };
@@ -98,9 +98,10 @@ void Game::AddOrUpdateServer(Server& server)
 				continue;
 		}
 
-		insertSQL += "," + key;
-
-		valuesToAdd.push_back(value);
+		//if (m_Params[key]->visibility == GameData::KeyAccess::PUBLIC) {
+			insertSQL += "," + key;
+			valuesToAdd.push_back(value);
+		//}
 	}
 
 	insertSQL += ") VALUES(?,?";
@@ -142,8 +143,8 @@ void Game::AddOrUpdateServer(Server& server)
 		m_DB.exec(columnSQL);
 
 		for (const auto& column : columnsToAdd) {
-			m_GameParams.insert(column);
-			m_Data.keys.push_back(std::make_pair(column, GameData::KeyType::STRING));
+			const auto& key = m_Data.keys.emplace_back(column, GameData::KeyType::STRING, GameData::KeyAccess::PUBLIC);
+			m_Params.emplace(key.name, &key);
 		}
 	}
 
@@ -155,10 +156,12 @@ void Game::AddOrUpdateServer(Server& server)
 		stmt.bind_at(i + 3, valuesToAdd[i]);
 
 	stmt.insert();
+	co_return;
 }
 
 std::vector<Game::Server> Game::GetServers(const std::string& query, const std::vector<std::string>& fields, const std::size_t limit)
 {
+	std::println("GetServers: {}", query);
 	auto error = std::string{};
 	auto servers = std::vector<Game::Server>{};
 
@@ -177,7 +180,7 @@ std::vector<Game::Server> Game::GetServers(const std::string& query, const std::
 		else if (action == auth_action::SQLITE_FUNCTION && (detail2 == "like"))
 			return auth_res::SQLITE_OK;
 
-		std::println("[gamedb][{}][retrieve]unauthorized: action({}) detail1({}), detail2({}), db({}), trigger({})", m_Data.name, std::to_underlying(action), detail1, detail2, dbName, trigger);
+		std::println("[gamedb][{}][retrieve] unauthorized: action({}) detail1({}), detail2({}), db({}), trigger({})", m_Data.name, std::to_underlying(action), detail1, detail2, dbName, trigger);
 		return auth_res::SQLITE_DENY;
 	});
 	

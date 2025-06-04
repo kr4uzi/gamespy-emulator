@@ -37,12 +37,6 @@
     <Filter Include="Header Files\dns">
       <UniqueIdentifier>{d3ccc413-98bd-41dc-9409-94eaa37a8c59}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Header Files\http">
-      <UniqueIdentifier>{a1c5de9a-449d-4f0b-b891-fbc379341b11}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Source Files\http">
-      <UniqueIdentifier>{fc639f77-11a1-4ad7-a01d-8a3c37fb4275}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Header Files\gamespy">
       <UniqueIdentifier>{83854c5f-804c-485d-ba7a-653dfcfec6c0}</UniqueIdentifier>
     </Filter>
@@ -101,15 +95,6 @@
     </ClInclude>
     <ClInclude Include="textpacket.h">
       <Filter>Header Files\login</Filter>
-    </ClInclude>
-    <ClInclude Include="http.h">
-      <Filter>Header Files\http</Filter>
-    </ClInclude>
-    <ClInclude Include="http.client.h">
-      <Filter>Header Files\http</Filter>
-    </ClInclude>
-    <ClInclude Include="bf2web.h">
-      <Filter>Header Files\http</Filter>
     </ClInclude>
     <ClInclude Include="sqlite.h">
       <Filter>Header Files\database</Filter>
@@ -190,15 +175,6 @@
     </ClCompile>
     <ClCompile Include="textpacket.cpp">
       <Filter>Source Files\login</Filter>
-    </ClCompile>
-    <ClCompile Include="http.cpp">
-      <Filter>Source Files\http</Filter>
-    </ClCompile>
-    <ClCompile Include="http.client.cpp">
-      <Filter>Source Files\http</Filter>
-    </ClCompile>
-    <ClCompile Include="bf2web.cpp">
-      <Filter>Source Files\http</Filter>
     </ClCompile>
     <ClCompile Include="sqlite.cpp">
       <Filter>Source Files\database</Filter>

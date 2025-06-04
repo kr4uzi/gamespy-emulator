@@ -9,7 +9,6 @@
 #include "ms.h"
 #include "key.h"
 #include "stats.h"
-#include "http.h"
 #include "asio.h"
 #include "dns.h"
 #include <format>
@@ -59,16 +58,12 @@ boost::asio::awaitable<void> Server::Run()
 	auto gameDB = std::make_unique<gamespy::GameDBSQLite>(m_CFG);
 
 	auto master = gamespy::MasterServer{ m_Context, *gameDB };
-	auto gpcm = gamespy::LoginServer{ m_Context, *playerDB };
+	auto gpcm = gamespy::LoginServer{ m_Context, *gameDB, *playerDB };
 	auto gpsp = gamespy::SearchServer{ m_Context, *playerDB };
 	auto ms = gamespy::BrowserServer{ m_Context, *gameDB };
 	auto key = gamespy::CDKeyServer{ m_Context };
-	auto stats = gamespy::StatsServer{ m_Context, *gameDB };
+	auto stats = gamespy::StatsServer{ m_Context, *gameDB, *playerDB };
 	std::unique_ptr<gamespy::DNSServer> dns;
-	std::unique_ptr<gamespy::HttpServer> http;
-
-	if (m_CFG.IsHTTPEnabled())
-		http = std::make_unique<gamespy::HttpServer>(m_Context);
 
 	if (m_CFG.IsDNSEnabled())
 		dns = std::make_unique<gamespy::DNSServer>(m_Context, *gameDB);
@@ -82,8 +77,6 @@ boost::asio::awaitable<void> Server::Run()
 
 	if (dns)
 		boost::asio::co_spawn(m_Context, dns->AcceptConnections(), coro_log("dns"));
-	if (http)
-		boost::asio::co_spawn(m_Context, http->AcceptClients(), coro_log("http"));
 
 	boost::asio::system_timer wait{ m_Context, gamespy::Clock::time_point::max() };
 	co_await wait.async_wait(boost::asio::use_awaitable);

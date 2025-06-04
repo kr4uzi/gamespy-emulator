@@ -1,23 +1,22 @@
 #pragma once
 #include "asio.h"
-#include "gamedb.h"
 #include <string>
+#include <variant>
+#include <map>
 
 namespace gamespy {
+	class GameDB;
+	class PlayerDB;
 	struct TextPacket;
+
 	class StatsClient {
 		boost::asio::ip::tcp::socket m_Socket;
+		boost::asio::streambuf m_RecvBuffer;
 
-		GameDB& m_DB;
+		PlayerDB& m_PlayerDB;
+		GameDB& m_GameDB;
 		std::string m_ServerChallenge;
 		std::int32_t m_SessionKey;
-
-		enum class STATES {
-			INITIALIZING = 0,
-			AUTHENTICATING = 1,
-			AUTHENTICATED = 2,
-			LOGGING_OUT
-		} m_State = STATES::INITIALIZING;
 
 	public:
 		StatsClient() = delete;
@@ -27,13 +26,15 @@ namespace gamespy {
 		StatsClient(StatsClient&& rhs) = default;
 		StatsClient& operator=(StatsClient&& rhs) = default;
 
-		StatsClient(boost::asio::ip::tcp::socket socket, GameDB& db);
+		StatsClient(boost::asio::ip::tcp::socket socket, GameDB& gameDB, PlayerDB& playerDB);
 		~StatsClient();
 
 		boost::asio::awaitable<void> Process();
 
 	private:
+		boost::asio::awaitable<std::optional<TextPacket>> ReceivePacket();
+		boost::asio::awaitable<void> SendPacket(std::string message);
 
-		boost::asio::awaitable<void> SendChallenge();
+		boost::asio::awaitable<bool> Authenticate();
 	};
 }

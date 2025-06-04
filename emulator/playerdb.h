@@ -37,6 +37,7 @@ namespace gamespy {
 
 		virtual task<bool> HasPlayer(const std::string_view& name) = 0;
 		virtual task<std::optional<PlayerData>> GetPlayerByName(const std::string_view& name) = 0;
+		virtual task<std::optional<PlayerData>> GetPlayerByPID(std::uint64_t pid) = 0;
 		virtual task<std::vector<PlayerData>> GetPlayerByMailAndPassword(const std::string_view& email, const std::string_view& password) = 0;
 		virtual task<void> CreatePlayer(PlayerData& data) = 0;
 		virtual task<void> UpdatePlayer(const PlayerData& data) = 0;

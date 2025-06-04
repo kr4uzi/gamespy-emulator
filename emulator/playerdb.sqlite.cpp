@@ -30,7 +30,8 @@ PlayerDBSQLite::PlayerDBSQLite(const std::filesystem::path& dbFile)
 					`bantime` INT UNSIGNED NOT NULL DEFAULT 0,
 					`online` BOOLEAN NOT NULL DEFAULT 0
 				);
-				UPDATE SQLITE_SEQUENCE SET seq=2900000 WHERE name='player';
+				UPDATE sqlite_sequence SET seq=2900000 WHERE name='player';
+				INSERT INTO sqlite_sequence (name, seq) SELECT 'player', 2900000 WHERE NOT EXISTS (SELECT changes() AS change FROM sqlite_sequence WHERE change <> 0);
 				END TRANSACTION;
 			)SQL");
 		}
@@ -62,6 +63,22 @@ task<std::optional<PlayerData>> PlayerDBSQLite::GetPlayerByName(const std::strin
 		co_return PlayerData{
 			std::get<0>(data),
 			name,
+			std::get<1>(data),
+			std::get<2>(data),
+			std::get<3>(data)
+		};
+	}
+
+	co_return std::nullopt;
+}
+
+task<std::optional<PlayerData>> PlayerDBSQLite::GetPlayerByPID(std::uint64_t pid)
+{
+	auto stmt = sqlite::stmt{ m_DB, "SELECT name, email, password, country FROM player WHERE id=?", static_cast<std::int64_t>(pid) };
+	if (std::tuple<std::string_view, std::string_view, std::string_view, std::string_view> data; stmt.query(data)) {
+		co_return PlayerData{
+			pid,
+			std::get<0>(data),
 			std::get<1>(data),
 			std::get<2>(data),
 			std::get<3>(data)

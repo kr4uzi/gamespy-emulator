@@ -56,6 +56,25 @@ task<std::optional<PlayerData>> PlayerDBMySQL::GetPlayerByName(const std::string
 	co_return std::nullopt;
 }
 
+task<std::optional<PlayerData>> PlayerDBMySQL::GetPlayerByPID(std::uint64_t pid)
+{
+	auto stmt = co_await m_Conn.async_prepare_statement("SELECT name, email, password, country FROM player WHERE id=?", boost::asio::use_awaitable);
+	boost::mysql::results result;
+	co_await m_Conn.async_execute(stmt.bind(pid), result, boost::asio::use_awaitable);
+	if (!result.empty()) {
+		const auto& front = result.rows().front();
+		co_return PlayerData{
+			pid,
+			front.at(0).as_string(),
+			front.at(1).as_string(),
+			front.at(2).as_string(),
+			front.at(3).as_string()
+		};
+	}
+
+	co_return std::nullopt;
+}
+
 task<std::vector<PlayerData>> PlayerDBMySQL::GetPlayerByMailAndPassword(const std::string_view& email, const std::string_view& password)
 {
 	auto players = std::vector<PlayerData>{};

@@ -19,6 +19,19 @@ namespace gamespy {
 			SHORT = 2
 		};
 
+		enum class KeyAccess
+		{
+			PRIVATE = 0,
+			PUBLIC = 1
+		};
+
+		struct GameKey
+		{
+			std::string name;
+			KeyType type;
+			KeyAccess visibility = KeyAccess::PUBLIC;
+		};
+
 		enum class AvailableFlag : std::uint8_t {
 			AVAILABLE = 0,
 			DISABLED_TEMPORARY = 1,
@@ -38,14 +51,14 @@ namespace gamespy {
 		AvailableFlag available;
 		BackendFlag backend;
 		bool autoKeys; // wether to automatically add missing keys when a server is added
-		std::vector<std::pair<std::string, KeyType>> keys;
+		std::vector<GameKey> keys;
 
 		KeyType GetKeyType(const std::string& keyName) const noexcept
 		{
 			for (const auto& key : keys)
 			{
-				if (key.first == keyName)
-					return key.second;
+				if (key.name == keyName)
+					return key.type;
 			}
 
 			return KeyType::STRING;

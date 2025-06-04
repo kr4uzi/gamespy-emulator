@@ -31,7 +31,7 @@ boost::asio::awaitable<void> CDKeyServer::AcceptConnections()
 		utils::gs_xor(message, utils::xor_types::gamespy);
 		auto packet = TextPacket::parse(message);
 		if (!packet) {
-			std::println("[cd-key] failed to parse packet");
+			std::println("[cd-key] failed to parse packet:\n{}", message);
 			continue;
 		}
 

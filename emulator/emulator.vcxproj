@@ -180,7 +180,6 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="asio.h" />
-    <ClInclude Include="bf2web.h" />
     <ClInclude Include="config.h" />
     <ClInclude Include="key.h" />
     <ClInclude Include="playerdb.h" />
@@ -192,8 +191,6 @@
     <ClInclude Include="gpcm.client.h" />
     <ClInclude Include="gpsp.client.h" />
     <ClInclude Include="gpsp.h" />
-    <ClInclude Include="http.client.h" />
-    <ClInclude Include="http.h" />
     <ClInclude Include="master.h" />
     <ClInclude Include="md5.h" />
     <ClInclude Include="ms.client.h" />
@@ -209,7 +206,6 @@
     <ClInclude Include="utils.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="bf2web.cpp" />
     <ClCompile Include="config.cpp" />
     <ClCompile Include="key.cpp" />
     <ClCompile Include="playerdb.cpp" />
@@ -223,8 +219,6 @@
     <ClInclude Include="gpcm.h" />
     <ClCompile Include="gpsp.client.cpp" />
     <ClCompile Include="gpsp.cpp" />
-    <ClCompile Include="http.client.cpp" />
-    <ClCompile Include="http.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="master.cpp" />
     <ClCompile Include="md5.cpp" />

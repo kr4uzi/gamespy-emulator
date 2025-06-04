@@ -68,7 +68,7 @@ int main(int argc, char **argv)
 		// http://eapusher.dice.se/image.asp?lang=English
 		// gpsp.gamespy.com TCP 29901
 		// gpcm.gamespy.com TCP 29900
-		// gamestats.gamespy.com TCP 29920 <-- not used?
+		// gamestats.gamespy.com TCP 29920 <-- not used? (update 2025: yes this is used, but only when ranked is enabled!)
 		// %s.master.gamespy.com UDP 27900
 		// %s.ms%d.gamespy.com TCP 28910
 		// %s.available.gamespy.com UDP 27900 (same server as master)

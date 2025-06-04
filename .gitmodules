@@ -1,0 +1,3 @@
+[submodule "dependencies/GameSpy"]
+	path = dependencies/GameSpy
+	url = https://github.com/kr4uzi/GameSpy.git

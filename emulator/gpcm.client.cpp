@@ -1,4 +1,5 @@
 #include "gpcm.client.h"
+#include "gamedb.h"
 #include "utils.h"
 #include "textpacket.h"
 #include <boost/crc.hpp>
@@ -10,8 +11,8 @@ using namespace gamespy;
 
 using namespace std::string_literals;
 
-LoginClient::LoginClient(boost::asio::ip::tcp::socket socket, PlayerDB& db)
-	: m_Socket(std::move(socket)), m_HeartBeatTimer(m_Socket.get_executor()), m_DB(db)
+LoginClient::LoginClient(boost::asio::ip::tcp::socket socket, GameDB& gameDB, PlayerDB& playerDB)
+	: m_Socket(std::move(socket)), m_HeartBeatTimer(m_Socket.get_executor()), m_GameDB(gameDB), m_PlayerDB(playerDB)
 {
 
 }
@@ -64,13 +65,13 @@ boost::asio::awaitable<void> LoginClient::HandleLogin(const TextPacket& packet)
 		co_return;
 	}
 		
-	if (!co_await m_DB.HasPlayer(nameIter->second)) {
+	if (!co_await m_PlayerDB.HasPlayer(nameIter->second)) {
 		co_await m_Socket.async_send(boost::asio::buffer(R"(\error\\err\265\fatal\\errmsg\Username [)" + std::string{ nameIter->second } + R"(] doesn't exist!\id\1\final\)"), boost::asio::use_awaitable);
 		std::println("[login] unknown user: {}", nameIter->second);
 		co_return;
 	}
 
-	auto player = co_await m_DB.GetPlayerByName(nameIter->second);
+	auto player = co_await m_PlayerDB.GetPlayerByName(nameIter->second);
 	if (responseIter->second != utils::generate_challenge(nameIter->second, player->password, clientChallengeIter->second, m_ServerChallenge)) {
 		co_await m_Socket.async_send(boost::asio::buffer(R"(\error\\err\260\fatal\\errmsg\The password provided is incorrect.\id\1\final\)"s), boost::asio::use_awaitable);
 		std::println("[login] invalid password for user: {}", nameIter->second);
@@ -112,22 +113,31 @@ boost::asio::awaitable<void> LoginClient::HandleNewUser(const TextPacket& packet
 		co_return;
 	}
 
-	if (co_await m_DB.HasPlayer(nameIter->second)) {
+	if (co_await m_PlayerDB.HasPlayer(nameIter->second)) {
 		co_await m_Socket.async_send(boost::asio::buffer(R"(\error\\err\516\fatal\\errmsg\This account name is already in use!\id\1\final\)"s), boost::asio::use_awaitable);
 		co_return;
 	}
 
-	std::string password = utils::passdecode(std::string{ passwordEncIter->second });
+	const auto password = utils::passdecode(std::string{ passwordEncIter->second });
 	if (password.length() < 3)
 		co_await m_Socket.async_send(boost::asio::buffer(R"(\error\\err\0\fatal\\errmsg\The password is too short, must be 3 characters at least!\id\1\final\)"), boost::asio::use_awaitable);
 	else if (password.length() > 30)
 		co_await m_Socket.async_send(boost::asio::buffer(R"(\error\\err\0\fatal\\errmsg\The password is too long, must be 30 characters at most!\id\1\final\)"), boost::asio::use_awaitable);
 	else {
 		m_PlayerData.emplace(nameIter->second, emailIter->second, utils::md5(password), "??");
-		co_await m_DB.CreatePlayer(*m_PlayerData);
+		co_await m_PlayerDB.CreatePlayer(*m_PlayerData);
 		auto response = std::format(R"(\nur\\userid\{}\profileid\{}\id\1\final\)", m_PlayerData->GetUserID(), m_PlayerData->GetProfileID());
 		co_await m_Socket.async_send(boost::asio::buffer(response), boost::asio::use_awaitable);
 		std::println("[login] created new user: {}", nameIter->second);
+	}
+
+	auto gameIter = packet.values.find("gamename");
+	auto cdKeyIter = packet.values.find("cdkeyenc");
+	if (gameIter != packet.values.end() && cdKeyIter != packet.values.end()) {
+		if (m_GameDB.HasGame(gameIter->second)) {
+			const auto cdkey = utils::passdecode(cdKeyIter->second);
+			// TODO: Add cd-key to the player's profile
+		}
 	}
 }
 
@@ -153,7 +163,7 @@ boost::asio::awaitable<void> LoginClient::HandleUpdateProfile(const TextPacket& 
 		if (countryIter != packet.values.end()) {
 			auto oldCountry = m_PlayerData->country;
 			m_PlayerData->country = countryIter->second | std::views::transform((int(*)(int))std::toupper) | std::ranges::to<std::string>();
-			co_await m_DB.UpdatePlayer(*m_PlayerData);
+			co_await m_PlayerDB.UpdatePlayer(*m_PlayerData);
 		}
 	}
 	else {

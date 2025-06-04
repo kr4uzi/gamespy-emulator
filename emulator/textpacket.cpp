@@ -22,6 +22,11 @@ std::string TextPacket::str() const {
 	return out;
 }
 
+std::string& TextPacket::operator[](const std::string& key)
+{
+	return values[key];
+}
+
 std::expected<TextPacket, TextPacket::ParseError> TextPacket::parse(const std::span<const char>& buffer)
 {
 	if (buffer.size() < 2)
@@ -38,11 +43,11 @@ std::expected<TextPacket, TextPacket::ParseError> TextPacket::parse(const std::s
 		| std::views::transform(
 			[](const auto& chunk) {
 				auto iter = chunk.begin();
-				auto key = std::string_view{ (*iter).begin(), (*iter).end() };
+				auto key = std::string{ (*iter).begin(), (*iter).end() };
 				if (++iter != chunk.end())
-					return std::make_pair(key, std::string_view{ (*iter).begin(), (*iter).end() });
+					return std::make_pair(key, std::string{ (*iter).begin(), (*iter).end() });
 
-				return std::make_pair(key, std::string_view{});
+				return std::make_pair(key, std::string{});
 			})
 		| std::ranges::to<std::vector>()
 	;

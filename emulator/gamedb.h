@@ -10,7 +10,6 @@
 #include <filesystem>
 #include <functional>
 #include <optional>
-#include <set>
 #include <chrono>
 #include <array>
 #include <boost/signals2/signal.hpp>
@@ -25,14 +24,10 @@ namespace gamespy {
 	private:
 		sqlite::db m_DB;
 		GameData m_Data;
-		std::set<std::string> m_GameParams; // dynamic and static (GameData) keys
+		std::map<std::string_view, const GameData::GameKey*> m_Params; // references to m_Data.keys
 
 		// up to 254 most used values (implemented for completeness - was this used to save bandwith?)
 		std::vector<std::string> m_PopularValues;
-
-		// overrides how key-values are sent to clients (if a key is not present in this map, STRING will be used)
-		// (this is for faster lookup when 
-		std::map<std::string, GameData::KeyType> m_KeyTypeOverrides;
 
 	public:
 		Game(GameData data);
@@ -70,7 +65,7 @@ namespace gamespy {
 			std::string stats; // gamespy calls those "RULES"
 		};
 
-		void AddOrUpdateServer(Server& server);
+		task<void> AddOrUpdateServer(Server& server);
 		std::vector<Server> GetServers(const std::string& query, const std::vector<std::string>& fields, const std::size_t limit);
 		void CleanupServers(const std::vector<std::pair<std::string, std::uint16_t>>& servers);
 

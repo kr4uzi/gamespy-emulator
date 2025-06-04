@@ -103,7 +103,7 @@ boost::asio::awaitable<void> MasterServer::HandleHeartbeat(const udp::endpoint& 
 			.public_port = client.port(),
 			.data = packet->server
 		};
-		game.AddOrUpdateServer(server);
+		co_await game.AddOrUpdateServer(server);
 	}
 	else if (!m_AwaitingValidation.contains(client)) {
 		// Note: The challenge needs to be even-sized so that the base64 encoding can be generated without padding
@@ -178,7 +178,8 @@ boost::asio::awaitable<void> MasterServer::HandleChallenge(const udp::endpoint& 
 				.public_port = client.port(),
 				.data = iter->second.values
 			};
-			m_DB.GetGame(iter->second.gamename).AddOrUpdateServer(server);
+
+			co_await m_DB.GetGame(iter->second.gamename).AddOrUpdateServer(server);
 			std::println("[master][server][{}] {}:{} added", iter->second.gamename, server.public_ip, server.public_port);
 		}
 

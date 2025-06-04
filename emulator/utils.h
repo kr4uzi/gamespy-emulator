@@ -20,7 +20,9 @@ namespace gamespy {
 
 		struct xor_types {
 			static constexpr auto gamespy = std::array{ 'g', 'a', 'm', 'e', 's', 'p', 'y' };
-			static constexpr auto gamespy3d = std::array{ 'G', 'a', 'm', 'e', 'S', 'p', 'y', '3', 'D' };
+			static constexpr auto GameSpy3D = std::array{ 'G', 'a', 'm', 'e', 'S', 'p', 'y', '3', 'D' };
+			static constexpr auto ProjectAphex = std::array{ 'P', 'r', 'o', 'j', 'e', 'c', 't', 'A', 'p', 'h', 'e', 'x' };
+			static constexpr auto Industries = std::array{ 'I', 'n', 'd', 'u', 's', 't', 'r', 'i', 'e', 's' };
 		};
 
 		template<typename R, std::size_t N> requires std::ranges::range<R>

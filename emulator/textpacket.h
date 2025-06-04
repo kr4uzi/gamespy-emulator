@@ -13,10 +13,12 @@ namespace gamespy {
 			INVALID
 		};
 
-		std::string_view type;
-		std::map<std::string_view, std::string_view> values;
+		std::string type;
+		std::map<std::string, std::string> values;
 
 		std::string str() const;
+		std::string& operator[](const std::string& key);
+
 		static std::expected<TextPacket, ParseError> parse(const std::span<const char>& buffer);
 	};
 }

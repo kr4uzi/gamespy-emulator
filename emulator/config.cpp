@@ -26,7 +26,6 @@ Config::Config(const std::filesystem::path& path)
 	pt::ini_parser::read_ini(path.string(), cfg);
 
 	m_DNSEnabled = cfg.get<bool>("server.dns_enabled");
-	m_HTTPEnabled = cfg.get<bool>("server.http_enabled");
 	
 	const auto& playerDBType = cfg.get<std::string>("players.type");
 	if (playerDBType == "sqlite3") {
@@ -146,7 +145,7 @@ void Config::VisitGames(std::function<bool(const GameData&)> callback) const
 				{ "natneg", KeyType::BYTE },
 				{ "statechanged", KeyType::BYTE },
 				{ "bf2_dedicated", KeyType::STRING },
-				{ "bf2_ranked", KeyType::BYTE },
+				{ "bf2_ranked", KeyType::BYTE, GameData::KeyAccess::PRIVATE },
 				{ "bf2_anticheat", KeyType::BYTE },
 				{ "bf2_os", KeyType::STRING },
 				{ "bf2_autorec", KeyType::BYTE },
@@ -171,7 +170,7 @@ void Config::VisitGames(std::function<bool(const GameData&)> callback) const
 				{ "bf2_mapsize", KeyType::SHORT },
 				{ "bf2_globalunlocks", KeyType::BYTE },
 				{ "bf2_fps", KeyType::STRING },
-				{ "bf2_plasma", KeyType::BYTE },
+				{ "bf2_plasma", KeyType::BYTE, GameData::KeyAccess::PRIVATE },
 				{ "bf2_reservedslots", KeyType::SHORT },
 				{ "bf2_coopbotratio", KeyType::SHORT },
 				{ "bf2_coopbotcount", KeyType::SHORT },
@@ -181,6 +180,10 @@ void Config::VisitGames(std::function<bool(const GameData&)> callback) const
 		};
 
 		for (const auto& game : staticGames) {
+			if ((m_GameOPMode == GameOPMode::EXPLICIT_INCLUDE && !std::ranges::contains(m_GameNames, game.name))
+				|| (m_GameOPMode == GameOPMode::EXPLICIT_EXCLUDE && std::ranges::contains(m_GameNames, game.name)))
+				continue;
+				
 			if (callback(game))
 				break;
 		}
@@ -286,7 +289,7 @@ void Config::VisitGames(std::function<bool(const GameData&)> callback) const
 		if (keyList.size() != keyTypes.size())
 			throw std::out_of_range{ std::format("keys and key_types do not match for game {}", name) };
 
-		auto keys = std::vector<std::pair<std::string, GameData::KeyType>>{};
+		auto keys = decltype(GameData::keys){};
 		for (std::size_t i = 0, len = keyList.size(); i < len; i++)
 			keys.emplace_back(keyList[i], keyTypes[i]);
 
