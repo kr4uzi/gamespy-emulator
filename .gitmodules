@@ -1,3 +1,6 @@
 [submodule "dependencies/GameSpy"]
 	path = dependencies/GameSpy
 	url = https://github.com/kr4uzi/GameSpy.git
+[submodule "dependencies/detours"]
+	path = dependencies/detours
+	url = https://github.com/microsoft/Detours.git
