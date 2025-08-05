@@ -1,5 +1,6 @@
 #pragma once
 #include "gamedb.h"
+#include "game.h"
 #include "asio.h"
 #include <array>
 #include <chrono>

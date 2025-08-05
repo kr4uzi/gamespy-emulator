@@ -1,6 +1,7 @@
 #pragma once
 #include "asio.h"
 #include "sapphire.h"
+#include "game.h"
 #include <cstdint>
 #include <optional>
 #include <expected>
@@ -14,13 +15,13 @@ namespace gamespy {
 	struct ServerListRequest
 	{
 		enum class Options : std::uint8_t {
-			SEND_FIELDS_FOR_ALL = 1 << 0,
-			NO_SERVER_LIST      = 1 << 1,
-			PUSH_UPDATES        = 1 << 2,
-			ALTERNATE_SOURCE_IP = 1 << 3,
-			SEND_GROUPS         = 1 << 5,
-			NO_LIST_CACHE       = 1 << 6,
-			LIMIT_RESULT_COUNT  = 1 << 7
+			send_fields_for_all = 1 << 0,
+			no_server_list      = 1 << 1,
+			push_updates        = 1 << 2,
+			alternate_source_ip = 1 << 3,
+			send_groups         = 1 << 5,
+			no_list_cache       = 1 << 6,
+			limit_result_count  = 1 << 7
 		};
 
 		std::uint8_t protocolVersion;
@@ -28,27 +29,27 @@ namespace gamespy {
 
 		std::uint32_t fromGameVersion;
 
-		std::string fromGame;
-		std::string toGame;
+		std::string_view fromGame;
+		std::string_view toGame;
 
-		std::string challenge;
+		std::string_view challenge;
 
-		std::string serverFilter;
-		std::vector<std::string> fieldList;
+		std::string_view serverFilter;
+		std::vector<std::string_view> fieldList;
 
 		Options options;
 
 		std::optional<boost::asio::ip::address_v4> alternateSourceIP;
 		std::optional<std::uint32_t> limitResultCount;
 
-		static constexpr std::size_t CHALLENGE_LENGTH = 8;
+		static constexpr std::size_t client_challenge_length = 8;
 		enum class ParseError {
-			UNKNOWN_PROTOCOL_VERSION,
-			UNKNOWN_ENCODING_VERSION,
-			INVALID_KEY,
-			TOO_MANY_KEYS,
-			INVALID_ALTERNATE_IP,
-			INSUFFICIENT_LENGTH
+			unknown_protocol_version,
+			unknown_encoding_version,
+			invalid_key,
+			too_many_keys,
+			invalid_alternate_ip,
+			insufficient_length
 		};
 
 		using bytes = std::span<const std::uint8_t>;
@@ -78,7 +79,7 @@ namespace gamespy {
 
 		boost::asio::awaitable<void> HandleServerListRequest(const std::span<const std::uint8_t>& bytes);
 		std::vector<std::uint8_t> PrepareServerListHeader(const Game& game, const ServerListRequest& request);
-		std::vector<std::uint8_t> PrepareServer(const Game& game, const Game::Server& server, const ServerListRequest& request, bool usePopularValues = false);
+		std::vector<std::uint8_t> PrepareServer(const Game& game, const Game::SavedServer& server, const ServerListRequest& request, bool usePopularValues = false);
 
 	private:
 		BrowserClient() = delete;

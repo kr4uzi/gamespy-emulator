@@ -9,10 +9,8 @@
 namespace gamespy {
 	class PlayerDBMySQL : public PlayerDB
 	{
-		boost::asio::ssl::context m_SSL;
-		boost::mysql::tcp_ssl_connection m_Conn;
-
-		struct params_t
+	public:
+		struct ConnectionParams
 		{
 			std::string hostname;
 			std::uint16_t port;
@@ -21,12 +19,17 @@ namespace gamespy {
 			std::string database;
 		};
 
+	private:
+		boost::asio::ssl::context m_SSL;
+		boost::mysql::tcp_ssl_connection m_Conn;
+		ConnectionParams m_Params;
+
 	public:
-		PlayerDBMySQL(boost::asio::io_context& context);
+		PlayerDBMySQL(boost::asio::io_context& context, ConnectionParams params);
 		~PlayerDBMySQL();
 
-		boost::asio::awaitable<void> Connect(const params_t& params);
-		boost::asio::awaitable<void> Disconnect();
+		task<void> Connect() override;
+		task<void> Disconnect() override;
 
 		virtual task<bool> HasPlayer(const std::string_view& name) override;
 		virtual task<std::optional<PlayerData>> GetPlayerByName(const std::string_view& name) override;

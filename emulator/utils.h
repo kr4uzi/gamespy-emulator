@@ -6,6 +6,7 @@
 #include <array>
 #include <cstdint>
 #include <expected>
+#include <optional>
 #include <ranges>
 
 namespace gamespy {
@@ -34,5 +35,17 @@ namespace gamespy {
 		}
 
 		std::string md5(const std::string_view& text);
+
+		template<typename T = std::string_view>
+		std::optional<T> value_for_key(const std::span<const char>& textPacket, const std::string_view& key);
+
+		template<>
+		std::optional<std::string_view> value_for_key(const std::span<const char>& textPacket, const std::string_view& key);
+
+		template<>
+		std::optional<std::string> value_for_key(const std::span<const char>& textPacket, const std::string_view& key);
+
+		template<>
+		std::optional<std::uint32_t> value_for_key(const std::span<const char>& textPacket, const std::string_view& key);
 	}
 }

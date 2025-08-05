@@ -5,6 +5,7 @@
 namespace gamespy {
 	class PlayerDB;
 
+	// gpsp = gamespy search player
 	class SearchServer {
 		static constexpr boost::asio::ip::port_type PORT = 29901; // gpsp.gamespy.com
 		boost::asio::ip::tcp::acceptor m_Acceptor;

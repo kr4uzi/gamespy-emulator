@@ -2,7 +2,8 @@
 #include "utils.h"
 #include "playerdb.h"
 #include "gamedb.h"
-#include "textpacket.h"
+#include "game.h"
+#include "utils.h"
 #include <print>
 #include <ctime>
 #include <sstream>
@@ -47,34 +48,26 @@ StatsClient::~StatsClient()
 
 }
 
-boost::asio::awaitable<std::optional<TextPacket>> StatsClient::ReceivePacket()
+boost::asio::awaitable<std::span<char>> StatsClient::ReceivePacket()
 {
-	auto [error, length] = co_await boost::asio::async_read_until(m_Socket, m_RecvBuffer, TextPacket::PACKET_END, boost::asio::as_tuple(boost::asio::use_awaitable));
-	if (error) {
-		co_return std::nullopt;
-	}
+	auto packetEnd = std::string_view{"\\final\\"};
+	auto bufferPtr = m_RecvBuffer.prepare(1400);
+	auto [error, length] = co_await boost::asio::async_read_until(m_Socket, m_RecvBuffer, packetEnd, boost::asio::as_tuple(boost::asio::use_awaitable));
+	if (error) co_return std::span<char>{};
 
-	auto packet = std::string{ boost::asio::buffer_cast<const char*>(m_RecvBuffer.data()), m_RecvBuffer.size() };
+	auto packet = boost::asio::buffer_cast<char*>(bufferPtr);
 
-	// the client encodes all bytes except the trailing /final/
-	auto encoded = std::span{ packet.begin(), packet.end() - TextPacket::PACKET_END.length() };
+	auto encoded = std::span<char>{ packet, length - packetEnd.length() };
 	utils::gs_xor(encoded, utils::xor_types::GameSpy3D);
 
-	m_RecvBuffer.consume(packet.size());
-
-	// the parse can only fail with invalidty, not incompleteness because /final/ is guaranteed to be present
-	// in case of invalidity the caller of ReceivePacket needs to decide wether to abort or not
-	auto textPacket = TextPacket::parse(packet);
-	if (textPacket)
-		co_return *textPacket;
-
-	co_return std::nullopt;
+	m_RecvBuffer.consume(length);
+	co_return encoded;
 }
 
 boost::asio::awaitable<void> StatsClient::SendPacket(std::string message)
 {
 	utils::gs_xor(message, utils::xor_types::GameSpy3D);
-	co_await m_Socket.async_send(boost::asio::buffer(std::format("{}{}", message, TextPacket::PACKET_END)), boost::asio::use_awaitable);
+	co_await m_Socket.async_send(boost::asio::buffer(std::format("{}\\final\\", message)), boost::asio::use_awaitable);
 }
 
 boost::asio::awaitable<void> StatsClient::Process()
@@ -82,70 +75,70 @@ boost::asio::awaitable<void> StatsClient::Process()
 	if (!co_await Authenticate())
 		co_return;
 
-	auto packet = std::optional<TextPacket>{};
-	while (packet = co_await ReceivePacket()) {
-		if (packet->type == "getpid") {
+	for (auto _packet = co_await ReceivePacket(); !_packet.empty(); _packet = co_await ReceivePacket()) {
+		auto packet = std::string_view{ _packet };
+		if (packet.starts_with("\\getpid\\")) {
 			// "\getpid\\nick\%s\keyhash\%s\lid\%d"
-			std::println("[stats] {}", packet->str());
+			std::println("[stats] {}", packet);
 		}
-		else if (packet->type == "getpd") {
+		else if (packet.starts_with("\\getpd\\")) {
 			// "\getpd\\pid\%d\ptype\%d\dindex\%d\keys\%s\lid\%d"
-			std::println("[stats] {}", packet->str());
+			std::println("[stats] {}", packet);
 		}
-		else if (packet->type == "authp") {
-			std::println("[stats] {}", packet->str());
-
-			auto& values = packet->values;
-			const auto& localID = values["lid"];
-			if (localID.empty()) {
+		else if (packet.starts_with("\\authp\\")) {
+			std::println("[stats] {}", packet);
+			auto localID = utils::value_for_key(_packet, "\\lid\\");
+			if (!localID || localID->empty()) {
 				co_await SendPacket(R"(\error\\err\0\fatal\\errmsg\missing lid parameter\id\1)");
 				continue;
 			}
 
-			if (values.contains("authtoken")) {
-				const auto& authToken = values["authtoken"];
-				const auto& challenge = values["resp"];
+			auto authToken = utils::value_for_key(_packet, "\\authtoken\\");
+			auto resp = utils::value_for_key(_packet, "\\resp\\");
+			if (authToken) {
 				// TODO: investigate how an authToken is tied to a specific challenge
 				// https://github.com/ntrtwl/NitroDWC/blob/main/include/gs/dummy_auth.h
 				// PreAuthenticatePlayerPartner: \authp\\authtoken\%s\resp\%s\lid\%d
 			}
-			else if (values.contains("pid")) {
+			else if (auto pid = utils::value_for_key<std::uint32_t>(_packet, "\\pid\\"); pid) {
 				// PreAuthenticatePlayerPM: \authp\\pid\%d\resp\%s\lid\%d
-				auto pid = std::stoul(packet->values["pid"]);
-				const auto& player = co_await m_PlayerDB.GetPlayerByPID(pid);
-				if (player) {
-					if (values["resp"] == utils::md5(std::format("{}{}", player->password, ::create_challenge(m_SessionKey ^ ::CHALLENGEXOR))))
-						co_await SendPacket(std::format(R"(\pauthr\{}\lid\{})", player->GetProfileID(), localID));
+				const auto& player = co_await m_PlayerDB.GetPlayerByPID(*pid);
+				if (player && resp) {
+					if (*resp == utils::md5(std::format("{}{}", player->password, ::create_challenge(m_SessionKey ^ ::CHALLENGEXOR))))
+						co_await SendPacket(std::format(R"(\pauthr\{}\lid\{})", player->GetProfileID(), *localID));
 					else
-						co_await SendPacket(std::format(R"(\pauthr\-1\lid\{})", localID));
+						co_await SendPacket(std::format(R"(\pauthr\-1\lid\{})", *localID));
 				}
 				else {
-					co_await SendPacket(std::format(R"(\pauthr\-1\lid\{})", localID));
+					co_await SendPacket(std::format(R"(\pauthr\-1\lid\{})", *localID));
 				}
 			}
-			else if (values.contains("nick")) {
+			else if (auto nick = utils::value_for_key(_packet, "\\nick\\"); nick) {
 				// PreAuthenticatePlayerCD: \authp\\nick\%s\keyhash\%s\resp\%s\lid\%d
 				// during profile creation, the cd key can be linked to a players profile
 				// not sure what the resp is here though...
 
 			}						
 		}
-		else if (packet->type == "setpd") {
+		else if (packet.starts_with("\\setpd\\")) {
 			// "\setpd\\pid\%d\ptype\%d\dindex\%d\kv\%d\lid\%d\length\%d\data\"
-			std::println("[stats] {}", packet->str());
+			std::println("[stats] {}", packet);
 		}
-		if (packet->type == "updgame") {
-			auto& gamedata = packet->values["gamedata"];
-			std::replace(gamedata.begin(), gamedata.end(), '\x1', '\\');
-			std::println("[stats] {}", packet->str());
+		else if (packet.starts_with("\\updgame\\")) {
+			auto gamedata = utils::value_for_key<std::string>(_packet, "\\gamedata\\");
+			if (gamedata) {
+				std::replace(gamedata->begin(), gamedata->end(), '\x1', '\\');
+				std::println("[stats] {}", packet);
+			}
+
 			// "\updgame\\sesskey\%d\done\%d\gamedata\%s"
 			// "\updgame\\sesskey\%d\connid\%d\done\%d\gamedata\%s"
 			// "\updgame\\sesskey\%d\connid\%d\done\%d\gamedata\%s\dl\1"
 		}
-		else if (packet->type == "newgame") {
+		else if (packet.starts_with("\\newgame\\")) {
 			// "\newgame\\connid\%d\sesskey\%d"
 			// "\newgame\\sesskey\%d\challenge\%d"
-			std::println("[stats] {}", packet->str());
+			std::println("[stats] {}", packet);
 		}
 	}
 }
@@ -157,24 +150,25 @@ boost::asio::awaitable<bool> StatsClient::Authenticate()
 
 	co_await SendPacket(std::format(R"(\lc\1\challenge\{}\id\1)", m_ServerChallenge));
 
-	auto packet = co_await ReceivePacket();
-	if (!packet || packet->type != "auth") {
+	auto _packet = co_await ReceivePacket();
+	auto packet = std::string_view{ _packet };
+	auto gamename = utils::value_for_key(_packet, "gamename");
+	if (packet.empty() || !packet.starts_with("\\auth\\") || !gamename) {
 		std::println("[stats] received invalid response during authentication");
 		co_return false;
 	}
 
 	// "\auth\\gamename\%s\response\%s\port\%d\id\1"
-	const auto gamename = std::string{ packet->values["gamename"] };
-	if (!m_GameDB.HasGame(gamename)) {
-		std::println("[stats] unknown game {}", gamename);
+	if (!co_await m_GameDB.HasGame(*gamename)) {
+		std::println("[stats] unknown game {}", *gamename);
 		co_await SendPacket(R"(\error\\err\0\fatal\\errmsg\Unknown Game!\id\1)");
 		co_return false;
 	}
 
-	const auto& game = m_GameDB.GetGame(gamename);
-	const auto challenge = std::format("{}{}", g_crc32(m_ServerChallenge), game.Data().secretKey);
+	const auto& game = co_await m_GameDB.GetGame(*gamename);
+	const auto challenge = std::format("{}{}", g_crc32(m_ServerChallenge), game->secretKey());
 	const auto challengeHash = utils::md5(challenge);
-	if (packet->values["response"] != challengeHash) {
+	if (auto response = utils::value_for_key(_packet, "response"); !response || *response != challengeHash) {
 		std::println("[stats] received invalid response");
 		co_await SendPacket(R"(\error\\err\0\fatal\\errmsg\Invalid Response!\id\1)");
 		co_return false; 

@@ -1,8 +1,9 @@
 #pragma once
 #include "asio.h"
+#include <cstdint>
+#include <span>
 
 namespace gamespy {
-	struct TextPacket;
 	class PlayerDB;
 
 	class SearchClient {
@@ -20,7 +21,9 @@ namespace gamespy {
 		boost::asio::awaitable<void> Process();
 
 	private:
-		boost::asio::awaitable<void> HandleRetrieveProfiles(const TextPacket& packet);
-		boost::asio::awaitable<void> HandleProfileExists(const TextPacket& packet);
+		boost::asio::awaitable<void> HandleSearchNicks(const std::span<const char>& packet);
+		boost::asio::awaitable<void> HandleProfileExists(const std::span<const char>& packet);
+
+		boost::asio::awaitable<void> SendError(std::uint32_t errorCode, const std::string_view& message, bool fatal = false);
 	};
 }

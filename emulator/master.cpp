@@ -25,6 +25,7 @@ MasterServer::~MasterServer()
 
 void MasterServer::Cleanup(const boost::system::error_code& ec)
 {
+	/*
 	if (ec) return;
 
 	const auto& now = Clock::now();
@@ -33,7 +34,8 @@ void MasterServer::Cleanup(const boost::system::error_code& ec)
 			auto timeSinceLastUpdate = std::chrono::duration_cast<std::chrono::seconds>(now - i->second.last_update);
 			if (timeSinceLastUpdate > std::chrono::seconds{ 60 }) {
 				std::println("[master][server][{}] {}:{} timed out", i->second.gamename, i->first.address().to_string(), i->first.port());
-				m_DB.GetGame(i->second.gamename).CleanupServers({ std::make_pair(i->first.address().to_string(), i->first.port()) });
+				Game& game = co_await m_DB.GetGame(i->second.gamename);
+				game..CleanupServers({ std::make_pair(i->first.address().to_string(), i->first.port()) });
 				i = servers->erase(i);
 			}
 			else
@@ -42,7 +44,7 @@ void MasterServer::Cleanup(const boost::system::error_code& ec)
 	}
 
 	m_CleanupTimer.expires_from_now(std::chrono::seconds{ 60 });
-	m_CleanupTimer.async_wait(boost::bind(&MasterServer::Cleanup, this, boost::asio::placeholders::error));
+	m_CleanupTimer.async_wait(boost::bind(&MasterServer::Cleanup, this, boost::asio::placeholders::error));*/
 }
 
 boost::asio::awaitable<void> MasterServer::HandleAvailable(const udp::endpoint& client, QRPacket& packet)
@@ -51,17 +53,19 @@ boost::asio::awaitable<void> MasterServer::HandleAvailable(const udp::endpoint& 
 	// the response contains a 32-bit status flag which containts only 3 possible status: 0 = available, 1 = unavailable, 2 = temporarily unavailable
 	// sample package: 0x09 0x00 0x00 0x00 0x00 0x62 0x61 0x74 0x74 0x6C 0x65 0x66 0x69 0x65 0x6C 0x64 0x32 0x00
 	//                     |   INSTANCE KEY   |  b    a    t    t    l    e    f    i    e    l    d    2  |
-	std::string name{ reinterpret_cast<const char*>(packet.data.data()) };
-	if (m_DB.HasGame(name)) {
-		const auto& game = m_DB.GetGame(name);
-		switch (game.Data().available) {
-		case GameData::AvailableFlag::AVAILABLE:
+	auto name = std::string_view{ reinterpret_cast<const char*>(packet.data.data()), packet.data.size() - 1 };
+	if (co_await m_DB.HasGame(name)) {
+		auto game = co_await m_DB.GetGame(name);
+		auto available = game->availability();
+		using Availability = decltype(available);
+		switch (available) {
+		case Availability::available:
 			co_await m_Socket.async_send_to(boost::asio::buffer("\xFE\xFD\x09\0\0\0\0"), client, boost::asio::use_awaitable);
 			break;
-		case GameData::AvailableFlag::DISABLED_TEMPORARY:
+		case Availability::disabled_temporary:
 			co_await m_Socket.async_send_to(boost::asio::buffer("\xFE\xFD\x09\0\0\0\1"), client, boost::asio::use_awaitable);
 			break;
-		case GameData::AvailableFlag::DISABLED_PREMANENTLY:
+		case Availability::disabled_permanently:
 			co_await m_Socket.async_send_to(boost::asio::buffer("\xFE\xFD\x09\0\0\0\2"), client, boost::asio::use_awaitable);
 			break;
 		}
@@ -84,38 +88,38 @@ boost::asio::awaitable<void> MasterServer::HandleHeartbeat(const udp::endpoint& 
 	//
 	// sample packet:
 	// 0x03 (4-byte instance key)(n-bytes gameserver values: gamename 0x00 battlefield2 0x00 gamever 0x00 1.5....0x00) 0x00
-	if (!packet->server.contains("gamename")) {
+	if (!packet->serverData.contains("gamename")) {
 		std::println("[master] received HEARTBEAT with empty gamename");
 		co_return;
 	}
 
-	const auto& gamename = packet->server.at("gamename");
-	if (!m_DB.HasGame(gamename)) {
+	const auto& gamename = packet->serverData.at("gamename");
+	if (!co_await m_DB.HasGame(gamename)) {
 		std::println("[master] received HEARTBEAT for unknown game {}", gamename);
 		co_return;
 	}
 
-	auto& game = m_DB.GetGame(gamename);
+	auto game = co_await m_DB.GetGame(gamename);
 	if (m_Validated.contains(client)) {
-		auto server = Game::Server{
+		auto server = Game::IncomingServer{
 			.last_update = Clock::now(),
 			.public_ip = client.address().to_string(),
 			.public_port = client.port(),
-			.data = packet->server
+			.data = packet->serverData
 		};
-		co_await game.AddOrUpdateServer(server);
+		co_await game->AddOrUpdateServer(server);
 	}
 	else if (!m_AwaitingValidation.contains(client)) {
 		// Note: The challenge needs to be even-sized so that the base64 encoding can be generated without padding
 		// This is required because the gamespy encoding is only base64-ish and handles the padding differently than regular base64 encoding
 		
 		// Note: query challenge is used to prevent id-spoofing but this isn't yet implemented
-		enum BACKEND_OPTIONS : std::uint8_t {
-			QR2_USE_QUERY_CHALLENGE = 128
-		} backendOptions{ 0 };
+		//enum BACKEND_OPTIONS : std::uint8_t {
+		//	QR2_USE_QUERY_CHALLENGE = 128
+		//} backendOptions{ 0 };
 		
 		auto challenge = utils::random_string("ABCDEFGHJIKLMNOPQRSTUVWXYZ123456789", 7);
-		auto responseData = std::format("{}{:2X}{:8X}{:4X}", challenge, static_cast<int>(backendOptions), client.address().to_v4().to_uint(), client.port());
+		auto responseData = std::format("{}{:2X}{:8X}{:4X}", challenge, std::to_underlying(game->backend()), client.address().to_v4().to_uint(), client.port());
 
 		std::vector<uint8_t> response;
 		response.push_back(0xFE);
@@ -127,17 +131,17 @@ boost::asio::awaitable<void> MasterServer::HandleHeartbeat(const udp::endpoint& 
 
 		m_AwaitingValidation.emplace(client, server{ 
 			.last_update = Clock::now(),
-			.proof = utils::encode(game.Data().secretKey, responseData), 
+			.proof = utils::encode(game->secretKey(), responseData),
 			.instance = packet->instance,
-			.gamename = gamename,
-			.values = packet->server
+			.gamename = std::string{ gamename },
+			.values = std::map<std::string, std::string>(packet->serverData.begin(), packet->serverData.end())
 		});
 		co_await m_Socket.async_send_to(boost::asio::buffer(response), client, boost::asio::use_awaitable);
 	}
 	else if (m_AwaitingValidation.contains(client)) {
 		auto& server = m_AwaitingValidation.at(client);
 		server.last_update = Clock::now();
-		server.values = packet->server;
+		server.values = std::map<std::string, std::string>(packet->serverData.begin(), packet->serverData.end());
 	}
 }
 
@@ -172,14 +176,15 @@ boost::asio::awaitable<void> MasterServer::HandleChallenge(const udp::endpoint& 
 
 			co_await m_Socket.async_send_to(boost::asio::buffer(response), client, boost::asio::use_awaitable);
 
-			auto server = Game::Server{
+			auto server = Game::IncomingServer{
 				.last_update = iter->second.last_update,
 				.public_ip = client.address().to_string(),
 				.public_port = client.port(),
-				.data = iter->second.values
+				.data = std::map<std::string_view, std::string_view>{ std::from_range, iter->second.values }
 			};
 
-			co_await m_DB.GetGame(iter->second.gamename).AddOrUpdateServer(server);
+			auto game = co_await m_DB.GetGame(iter->second.gamename);
+			co_await game->AddOrUpdateServer(server);
 			std::println("[master][server][{}] {}:{} added", iter->second.gamename, server.public_ip, server.public_port);
 		}
 
@@ -197,9 +202,7 @@ boost::asio::awaitable<void> MasterServer::AcceptConnections()
 	while (m_Socket.is_open()) {
 		udp::endpoint client;
 		const auto [error, length] = co_await m_Socket.async_receive_from(boost::asio::buffer(buff), client, boost::asio::as_tuple(boost::asio::use_awaitable));
-		if (error)
-			break;
-		else if (length == 0)
+		if (error || length == 0)
 			continue;
 			
 		try {
@@ -212,16 +215,16 @@ boost::asio::awaitable<void> MasterServer::AcceptConnections()
 			using Type = QRPacket::Type;
 			switch (packet->type)
 			{
-			case Type::PREQUERY_IP_VERIFY:
+			case Type::prequery_ip_verify:
 				co_await HandleAvailable(client, *packet);
 				break;
-			case Type::HEARTBEAT:
+			case Type::heartbeat:
 				co_await HandleHeartbeat(client, *packet);
 				break;
-			case Type::KEEPALIVE:
+			case Type::keepalive:
 				co_await HandleKeepAlive(client, *packet);
 				break;
-			case Type::CHALLENGE:
+			case Type::challenge:
 				co_await HandleChallenge(client, *packet);
 				break;
 			default:

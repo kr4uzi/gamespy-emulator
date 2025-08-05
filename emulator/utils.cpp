@@ -7,6 +7,7 @@
 #include <random>
 #include <sstream>
 #include <ranges>
+#include <charconv>
 using namespace gamespy;
 
 namespace {
@@ -134,4 +135,50 @@ std::string utils::md5(const std::string_view& text)
 {
 	const ::md5 hash(text.begin(), text.end());
 	return hash.hex_digest<std::string>();
+}
+
+template<>
+std::optional<std::string_view> utils::value_for_key(const std::span<const char>& _textPacket, const std::string_view& key)
+{
+	auto packet = std::string_view{ _textPacket.data(), _textPacket.size() };
+	auto start = packet.find(key);
+	if (start == std::string_view::npos)
+		return std::nullopt;
+
+	start += key.length();
+	auto end = start;
+	auto delim = key[0];
+	while (_textPacket[end] != delim && _textPacket[end] != '\0' && end < _textPacket.size())
+		end++;
+
+	if (end == _textPacket.size())
+		return std::nullopt;
+
+	return std::string_view{ _textPacket.begin() + start, _textPacket.begin() + end };
+}
+
+template<>
+std::optional<std::string> utils::value_for_key(const std::span<const char>& _textPacket, const std::string_view& key)
+{
+	auto value = value_for_key<std::string_view>(_textPacket, key);
+	if (!value)
+		return std::nullopt;
+
+	return std::string{ value->begin(), value->end() };
+}
+
+template<>
+std::optional<std::uint32_t> utils::value_for_key(const std::span<const char>& _textPacket, const std::string_view& key)
+{
+	auto value = value_for_key<std::string_view>(_textPacket, key);
+	if (!value)
+		return std::nullopt;
+
+	std::uint32_t result;
+	auto end = value->data() + value->size();
+	auto [ptr, ec] = std::from_chars(value->data(), end, result);
+	if (ec != std::errc{} || ptr == end)
+		return std::nullopt;
+
+	return result;
 }

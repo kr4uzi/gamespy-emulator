@@ -8,14 +8,14 @@ using namespace gamespy;
 std::expected<QRPacket, QRPacket::ParseError> QRPacket::Parse(const std::span<const std::uint8_t>& buffer)
 {
 	if (buffer.size() < 5)
-		return std::unexpected(ParseError::TOO_SMALL);
+		return std::unexpected(ParseError::too_small);
 
-	if (buffer[0] > std::to_underlying(Type::PREQUERY_IP_VERIFY))
-		return std::unexpected(ParseError::UNKNOWN_TYPE);
+	if (buffer[0] > std::to_underlying(Type::prequery_ip_verify))
+		return std::unexpected(ParseError::unknown_type);
 
-	const auto data = std::vector<std::uint8_t>{ buffer.begin() + 5, buffer.end() };
+	const auto data = buffer.subspan(5);
 	if (!data.empty() && data.back() != 0)
-		return std::unexpected(ParseError::UNEXPECTED_END);
+		return std::unexpected(ParseError::unexpected_end);
 
 	return QRPacket{
 		.type = static_cast<Type>(buffer[0]),
@@ -26,23 +26,23 @@ std::expected<QRPacket, QRPacket::ParseError> QRPacket::Parse(const std::span<co
 
 struct QRMap
 {
-	std::map<std::string, std::string> data;
+	std::map<std::string_view, std::string_view> data;
 
 	template<typename Iter = std::forward_iterator_tag>
 	static std::expected<QRMap, QRPacket::ParseError> Parse(Iter& pos, const Iter& end)
 	{
 		using ParseError = QRPacket::ParseError;
 		if (pos == end)
-			return std::unexpected(ParseError::TOO_SMALL);
+			return std::unexpected(ParseError::too_small);
 
-		std::map<std::string, std::string> data;
-		std::string key;
+		std::map<std::string_view, std::string_view> data;
+		std::string_view key;
 		while (pos != end) {
 			auto strEnd = std::find(pos, end, '\0');
 			if (strEnd == end)
-				return std::unexpected(ParseError::TOO_SMALL);
+				return std::unexpected(ParseError::too_small);
 
-			auto str = std::string{ pos, strEnd };
+			auto str = std::string_view{ reinterpret_cast<const char*>(&*pos), reinterpret_cast<const char*>(&*strEnd) };
 			pos = strEnd + 1;
 
 			if (key.empty()) {
@@ -55,7 +55,7 @@ struct QRMap
 			}
 			else {
 				data.emplace(key, std::move(str));
-				key.clear();
+				key = std::string_view{};
 			}
 		}
 
@@ -67,7 +67,7 @@ struct QRMap
 
 struct QRTable
 {
-	using row_t = std::vector<std::string>;
+	using row_t = std::vector<std::string_view>;
 	row_t header;
 	std::vector<row_t> rows;
 
@@ -76,11 +76,11 @@ struct QRTable
 	{
 		using ParseError = QRPacket::ParseError;
 		if (pos == end)
-			return std::unexpected(ParseError::TOO_SMALL);
+			return std::unexpected(ParseError::too_small);
 
 		std::uint16_t count = *pos++ << 8;
 		if (pos == end)
-			return std::unexpected(ParseError::TOO_SMALL);
+			return std::unexpected(ParseError::too_small);
 		count |= *pos++;
 		
 		bool headersParsed = false;
@@ -90,16 +90,16 @@ struct QRTable
 		while (pos != end) {
 			auto columnEnd = std::find(pos, end, '\0');
 			if (columnEnd == end)
-				return std::unexpected(ParseError::TOO_SMALL);
+				return std::unexpected(ParseError::too_small);
 
-			auto column = std::string{ pos, columnEnd };
+			auto column = std::string_view{ reinterpret_cast<const char*>(&*pos), reinterpret_cast<const char*>(&*columnEnd) };
 			pos = columnEnd + 1;
 
 			if (!headersParsed && column.ends_with(headerEnd))
 				headers.push_back(std::move(column));
 			else {
 				if (headers.empty())
-					return std::unexpected(ParseError::UNEXPECTED_END);
+					return std::unexpected(ParseError::unexpected_end);
 
 				// empty column indicates end of headers
 				if (column.empty()) {
@@ -121,7 +121,7 @@ struct QRTable
 		}
 
 		if (rows.size() < count || (!rows.empty() && rows.back().size() != headers.size()))
-			return std::unexpected(ParseError::TOO_SMALL);
+			return std::unexpected(ParseError::too_small);
 
 		return QRTable{
 			.header = headers,
@@ -161,5 +161,10 @@ std::expected<QRHeartbeatPacket, QRPacket::ParseError> QRHeartbeatPacket::Parse(
 		}
 	}
 	
-	return std::unexpected(QRPacket::ParseError::TOO_SMALL);
+	return std::unexpected(QRPacket::ParseError::too_small);
+}
+
+namespace {
+#include <GameSpy/qr2/qr2.h>
+	static_assert(sizeof(QRPacket::instance) == REQUEST_KEY_LEN, "REQUEST_KEY_LEN value missmatch");
 }

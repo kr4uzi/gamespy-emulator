@@ -2,20 +2,19 @@
 #include "asio.h"
 #include "playerdb.h"
 #include <optional>
+#include <span>
 #include <string>
+#include <string_view>
 
 namespace gamespy {
-	class GameDB;
-	struct TextPacket;
 	class LoginClient {
 		boost::asio::ip::tcp::socket m_Socket;
 		boost::asio::deadline_timer m_HeartBeatTimer;
 
-		GameDB& m_GameDB;
 		PlayerDB& m_PlayerDB;
 		std::optional<PlayerData> m_PlayerData;
 		std::string m_ServerChallenge;
-		bool m_ProfileDataSent = false;
+		std::string m_LoginTicket;
 
 		enum class STATES {
 			INITIALIZING = 0,
@@ -32,20 +31,22 @@ namespace gamespy {
 		LoginClient(LoginClient&& rhs) = default;
 		LoginClient& operator=(LoginClient&& rhs) = default;
 
-		LoginClient(boost::asio::ip::tcp::socket socket, GameDB& gameDB, PlayerDB& playerDB);
+		LoginClient(boost::asio::ip::tcp::socket socket, PlayerDB& playerDB);
 		~LoginClient();
 
 		boost::asio::awaitable<void> Process();
 
 	private:
-		std::string GeneratePlayerData() const;
 		boost::asio::awaitable<void> KeepAliveClient();
 
 		boost::asio::awaitable<void> SendChallenge();
-		boost::asio::awaitable<void> HandleLogin(const TextPacket& packet);
-		boost::asio::awaitable<void> HandleNewUser(const TextPacket& packet);
-		boost::asio::awaitable<void> HandleGetProfile(const TextPacket& packet);
-		boost::asio::awaitable<void> HandleUpdateProfile(const TextPacket& packet);
-		boost::asio::awaitable<void> HandleLogout(const TextPacket& packet);
+		boost::asio::awaitable<void> HandleLogin(const std::span<const char>& packet);
+		boost::asio::awaitable<void> HandleNewUser(const std::span<const char>& packet);
+		boost::asio::awaitable<void> HandleGetProfile(const std::span<const char>& packet);
+		boost::asio::awaitable<void> HandleUpdateProfile(const std::span<const char>& packet);
+		boost::asio::awaitable<void> HandleLogout(const std::span<const char>& packet);
+
+		boost::asio::awaitable<void> SendPlayerData(std::uint32_t requestId);
+		boost::asio::awaitable<void> SendError(std::uint32_t requestId, std::uint32_t errorCode, const std::string_view& message, bool fatal = false);
 	};
 }

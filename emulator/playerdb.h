@@ -35,6 +35,9 @@ namespace gamespy {
 		PlayerDB();
 		virtual ~PlayerDB();
 
+		virtual task<void> Connect() = 0;
+		virtual task<void> Disconnect() = 0;
+
 		virtual task<bool> HasPlayer(const std::string_view& name) = 0;
 		virtual task<std::optional<PlayerData>> GetPlayerByName(const std::string_view& name) = 0;
 		virtual task<std::optional<PlayerData>> GetPlayerByPID(std::uint64_t pid) = 0;

@@ -31,7 +31,7 @@ boost::asio::awaitable<void> LoginServer::HandleIncoming(boost::asio::ip::tcp::s
 {
 	auto addr = socket.remote_endpoint().address().to_string();
 	try {
-		LoginClient client(std::move(socket), m_GameDB, m_PlayerDB);
+		LoginClient client(std::move(socket), m_PlayerDB);
 		co_await client.Process();
 	}
 	catch (const std::exception& e) {

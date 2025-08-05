@@ -45,6 +45,16 @@ PlayerDBSQLite::~PlayerDBSQLite()
 
 }
 
+task<void> PlayerDBSQLite::Connect()
+{
+	co_return;
+}
+
+task<void> PlayerDBSQLite::Disconnect()
+{
+	co_return;
+}
+
 task<bool> PlayerDBSQLite::HasPlayer(const std::string_view& name)
 {
 	auto stmt = sqlite::stmt{ m_DB, "SELECT COUNT(*) FROM player WHERE name=?", name };

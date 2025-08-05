@@ -12,6 +12,9 @@ namespace gamespy {
 		PlayerDBSQLite(const std::filesystem::path& dbFile);
 		~PlayerDBSQLite();
 
+		virtual task<void> Connect() override;
+		virtual task<void> Disconnect() override;
+
 		virtual task<bool> HasPlayer(const std::string_view& name) override;
 		virtual task<std::optional<PlayerData>> GetPlayerByName(const std::string_view& name) override;
 		virtual task<std::optional<PlayerData>> GetPlayerByPID(std::uint64_t pid) override;

@@ -1,6 +1,6 @@
 #pragma once
-#ifndef _GAMESPY_EMULATOR_H_
-#define _GAMESPY_EMULATOR_H_
+#ifndef _GAMESPY_EMULATOR_ASIO_H_
+#define _GAMESPY_EMULATOR_ASIO_H_
 
 // For whatever reason the sdkddkver.h include is missing in asio
 // The following conditions are copied from /boost/asio/detail/config.hpp
@@ -14,4 +14,4 @@
 
 #include <boost/asio.hpp>
 
-#endif // _GAMESPY_EMULATOR_H_
+#endif // _GAMESPY_EMULATOR_ASIO_H_

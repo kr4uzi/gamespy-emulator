@@ -1,11 +1,8 @@
 #include "gpsp.client.h"
-#include "textpacket.h"
 #include "playerdb.h"
 #include "utils.h"
 #include <format>
 #include <print>
-#include <cctype>
-#include <ranges>
 using namespace gamespy;
 
 SearchClient::SearchClient(boost::asio::ip::tcp::socket socket, PlayerDB& db)
@@ -19,34 +16,29 @@ SearchClient::~SearchClient()
 
 }
 
-boost::asio::awaitable<void> SearchClient::HandleRetrieveProfiles(const TextPacket& packet)
+boost::asio::awaitable<void> SearchClient::HandleSearchNicks(const std::span<const char>& packet)
 {
-	auto emailIter = packet.values.find("email");
-	auto passIter = packet.values.find("pass");
-	auto passEncIter = packet.values.find("passenc");
-	if (emailIter == packet.values.end() || (passIter == packet.values.end() && passEncIter == packet.values.end())) {
-		co_await m_Socket.async_send(boost::asio::buffer(R"(\error\\err\0\fatal\\errmsg\Invalid Query!\id\1\final\)"), boost::asio::use_awaitable);
-		co_return;
-	}
-
+	auto email = utils::value_for_key(packet, "\\email\\");
+	auto pass = utils::value_for_key(packet, "\\pass\\");
+	auto passEnc = utils::value_for_key(packet, "\\passenc\\");
 	std::string passwordMD5;
-	if (passIter != packet.values.end()) {
-		passwordMD5 = utils::md5(passIter->second);
+	if (pass) {
+		passwordMD5 = utils::md5(*pass);
 	}
-	else if (passEncIter != packet.values.end()) {
-		std::string password = utils::passdecode(std::string{ passEncIter->second });
-		passwordMD5 = utils::md5(passIter->second);
+	else if (passEnc && !passEnc->empty()) {
+		std::string password = utils::passdecode(std::string{ *passEnc });
+		passwordMD5 = utils::md5(*passEnc);
 	}
 
-	if (passwordMD5.empty()) {
-		co_await m_Socket.async_send(boost::asio::buffer(R"(\error\\err\0\fatal\\errmsg\Invalid Query!\id\1\final\)"), boost::asio::use_awaitable);
+	if (!email || passwordMD5.empty()) {
+		co_await SendError(0, "Invalid Query!", true);
 		co_return;
 	}
 
-	const auto email = emailIter->second | std::views::transform((int(*)(int))std::tolower) | std::ranges::to<std::string>();
-	auto players = co_await m_DB.GetPlayerByMailAndPassword(email, passwordMD5);
+	const auto emailNormalized = *email | std::views::transform((int(*)(int))std::tolower) | std::ranges::to<std::string>();
+	const auto& players = co_await m_DB.GetPlayerByMailAndPassword(emailNormalized, passwordMD5);
 	if (players.empty())
-		co_await m_Socket.async_send(boost::asio::buffer(R"(\error\\err\551\fatal\\errmsg\Unable to get any associated profiles.\id\1\final\)"), boost::asio::use_awaitable);
+		co_await SendError(551, "Unable to get any associated profiles.", true);
 	else {
 		auto response = std::format(R"(\nr\{})", players.size());
 
@@ -58,18 +50,18 @@ boost::asio::awaitable<void> SearchClient::HandleRetrieveProfiles(const TextPack
 	}	
 }
 
-boost::asio::awaitable<void> SearchClient::HandleProfileExists(const TextPacket& packet)
+boost::asio::awaitable<void> SearchClient::HandleProfileExists(const std::span<const char>& packet)
 {
-	auto nickIter = packet.values.find("nick");
-	auto uniqueNickIter = packet.values.find("uniquenick");
+	auto nick = utils::value_for_key(packet, "\\nick\\");
+	auto uniqueNick = utils::value_for_key(packet, "\\uniquenick\\");
 	std::string_view name;
-	if (nickIter != packet.values.end())
-		name = nickIter->second;
-	else if (uniqueNickIter != packet.values.end())
-		name = uniqueNickIter->second;
+	if (nick)
+		name = *nick;
+	else if (uniqueNick)
+		name = *uniqueNick;
 
 	if (name.empty()) {
-		co_await m_Socket.async_send(boost::asio::buffer(R"(\error\\err\0\fatal\\errmsg\Invalid Query!\id\1\final\)"), boost::asio::use_awaitable);
+		co_await SendError(0, "Invalid Query!", true);
 		co_return;
 	}
 	
@@ -79,8 +71,8 @@ boost::asio::awaitable<void> SearchClient::HandleProfileExists(const TextPacket&
 		co_await m_Socket.async_send(boost::asio::buffer(response), boost::asio::use_awaitable);
 	}
 	else {
-		auto response = std::format(R"(\error\\err\265\fatal\\errmsg\Username [{}] doesn't exist!\id\1\final\)", name);
-		co_await m_Socket.async_send(boost::asio::buffer(response), boost::asio::use_awaitable);
+		auto response = std::format("Username [{}] doesn't exist!", name);
+		co_await SendError(265, "Invalid Query!", true);
 	}
 }
 
@@ -88,26 +80,44 @@ boost::asio::awaitable<void> SearchClient::Process()
 {
 	boost::asio::streambuf buff;
 	while (m_Socket.is_open()) {
-		auto [error, length] = co_await boost::asio::async_read_until(m_Socket, buff, TextPacket::PACKET_END, boost::asio::as_tuple(boost::asio::use_awaitable));
-		if (error)
-			break;
-		
-		auto theSize = buff.size();
-		auto packet = TextPacket::parse(std::span{ boost::asio::buffer_cast<const char*>(buff.data()), buff.size() });
-		if (!packet) {
-			std::println("[search] failed to parse packet");
-			break;
-		}
+		auto [error, length] = co_await boost::asio::async_read_until(m_Socket, buff, "\\final\\", boost::asio::as_tuple(boost::asio::use_awaitable));
+		if (error) break;
 
-		if (packet->type == "nicks")
-			co_await HandleRetrieveProfiles(*packet);
-		else if (packet->type == "check")
-			co_await HandleProfileExists(*packet);
+		auto packet = std::span<const char>{ boost::asio::buffer_cast<const char*>(buff.data()), buff.size() };
+		auto textPacket = std::string_view{ packet.begin(), packet.end() };
+		// all requests (gpiSearch.c):
+		// search (sesskey, profileid, namespaceid, partnerid, nick?, uniquenick?, email?, firstname?, lastname?, icquin?, skip?, gamename)
+		// searchunique (sesskey, profileid, uniquenick, namespaces[,separated], gamename)
+		// valid (email, partnerid, gamename)
+		// nicks (email, passenc, namespaceid, partnerid, gamename)
+		// pmatch (sesskey, profileid, productid, gamename)
+		// check (nick, email, partnerid, passenc, gamename) 
+		// newuser (nick, email, passenc, productID, namespaceid, uniquenick, cdkey?, partnerid, gamename)
+		// others (sesskey, profileid, namespaceid, gamename)
+		// otherslist (sesskey, profileid, numopids, opids[|separated], gamename)
+		// uniquesearch (preferrednick, namespaceid, gamename)
+
+		// requests used by bf2:
+		if (textPacket.starts_with("\\nicks\\"))
+			co_await HandleSearchNicks(packet);
+		else if (textPacket.starts_with("\\check\\"))
+			co_await HandleProfileExists(packet);
 		else {
-			std::println("[search] received unknown packet of type {}: {}", packet->type, packet->str());
-			co_await m_Socket.async_send(boost::asio::buffer(R"(\error\\err\0\fatal\\errmsg\Invalid Query!\id\1\final\)"), boost::asio::use_awaitable);
+			std::println("[search] unhandled packet: {}", textPacket);
+			co_await SendError(0, "Invalid Query!");
 		}
 
-		buff.consume(buff.size());
+		buff.consume(packet.size());
 	}
+}
+
+boost::asio::awaitable<void> SearchClient::SendError(std::uint32_t errorCode, const std::string_view& errorMessage, bool fatal)
+{
+	auto response = std::format(R"(\error\\err\{}\errmsg\{})", errorCode, errorMessage);
+	if (fatal) {
+		response += "\\fatal\\";
+	}
+
+	response += "\\final\\";
+	co_await m_Socket.async_send(boost::asio::buffer(response), boost::asio::use_awaitable);
 }

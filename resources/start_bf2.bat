@@ -14,6 +14,6 @@ if not defined BF2Dir (
 )
 
 PUSHD "%BF2Dir%"
-"%~dp0withdll.exe" /d:"%~dp0redirector.dll" BF2.exe +menu 1 +fullscreen 0 +restart +szx 800 +szy 600 +gamespy 127.0.0.1
+"%~dp0withdll32.exe" /d:"%~dp0redirect32.dll" BF2.exe +menu 1 +fullscreen 0 +restart +szx 800 +szy 600
+POPD
 endlocal
-pause

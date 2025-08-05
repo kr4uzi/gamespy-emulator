@@ -4,7 +4,37 @@
 #include "sapphire.h"
 #include "utils.h"
 #include <print>
+#include <type_traits>
 using namespace gamespy;
+
+namespace {
+	constexpr std::uint8_t list_protocol_version = 1;
+	constexpr std::uint8_t list_encoding_version = 3;
+	constexpr std::size_t crypt_key_length = 8;
+	constexpr std::size_t server_challenge_length = 25;
+	static_assert(crypt_key_length <= std::numeric_limits<std::uint8_t>::max(), "crypt_key_length must fit in a unsigned char");
+	static_assert(server_challenge_length <= std::numeric_limits<std::uint8_t>::max(), "server_challenge_length must fit in a unsigned char");
+
+	enum ServerOptions : std::uint8_t {
+		unsolicited_udp           = 1,
+		private_ip                = 2,
+		connect_negotiate         = 4,
+		icmp_ip                   = 8,
+		non_standard_port         = 16,
+		non_standard_private_port = 32,
+		has_keys                  = 64,
+		has_full_rules            = 128
+	};
+
+	enum class RequestType : std::uint8_t {
+		server_list_request = 0,
+		server_info_request,
+		send_message_request,
+		keepalive_request,
+		maploop_request,
+		playersearch_request
+	};
+}
 
 BrowserClient::BrowserClient(boost::asio::ip::tcp::socket socket, GameDB& db)
 	: m_Socket(std::move(socket)), m_DB(db)
@@ -22,19 +52,25 @@ boost::asio::awaitable<void> BrowserClient::StartEncryption(const std::string_vi
 	if (m_Cypher)
 		co_return; // encryption already started
 
-	auto obfuscation = utils::random_string("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghjklmnopqrstuvwxyz0123456789", 8);
-	auto serverChallenge = utils::random_string("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghjklmnopqrstuvwxyz0123456789", 25);
+	auto cryptKey = utils::random_string("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghjklmnopqrstuvwxyz0123456789", ::crypt_key_length);
+	auto serverChallenge = utils::random_string("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghjklmnopqrstuvwxyz0123456789", ::server_challenge_length);
 
+	// GameSpy/serverbrowsing/sb_serverlist.c
 	std::vector<std::uint8_t> data;
-	data.push_back(((obfuscation.length() + 2) & 0xFF) ^ 0xEC);
-	data.append_range(std::array{ 0,0 }); // gameoptions 
-	data.append_range(obfuscation);
+	data.push_back(((cryptKey.length() + 2) & 0xFF) ^ 0xEC);
+	// gameoptions 
+	const auto& gameOptions = std::to_underlying(game.backend());
+	data.append_range(std::array{
+		(gameOptions >> 8) & 0xFF,
+		(gameOptions     ) & 0xFF
+	});
+	data.append_range(cryptKey);
 	data.push_back((serverChallenge.length() & 0xFF) ^ 0xEA);
 	data.append_range(serverChallenge);
 
 	auto key = std::vector<std::uint8_t>{ clientChallenge.begin(), clientChallenge.end() };
 	const auto& keySize = key.size();
-	const auto& secretKey = game.Data().secretKey;
+	const auto& secretKey = game.secretKey();
 	const auto& secretKeySize = secretKey.length();
 	for (std::string::size_type i = 0, size = serverChallenge.length(); i < size; i++)
 		key[(i * secretKey[i % secretKeySize]) % keySize] ^= (key[i % keySize] ^ serverChallenge[i]);
@@ -65,17 +101,8 @@ boost::asio::awaitable<void> BrowserClient::Process()
 		if (packetLength < buffer.size())
 			continue; // full packet was not yet received
 
-		enum class RequestType : std::uint8_t {
-			SERVER_LIST_REQUEST = 0,
-			SERVER_INFO_REQUEST,
-			SEND_MESSAGE_REQUEST,
-			KEEPALIVE_REPLY,
-			MAPLOOP_REQUEST,
-			PLAYERSEARCH_REQUEST
-		};
-
 		switch (static_cast<RequestType>(packet[2])) {
-		case RequestType::SERVER_LIST_REQUEST:
+		case RequestType::server_list_request:
 			co_await HandleServerListRequest(packet.subspan(3));
 			break;
 		default:
@@ -95,24 +122,24 @@ boost::asio::awaitable<void> BrowserClient::HandleServerListRequest(const std::s
 		co_return;
 	}
 
-	if (!m_DB.HasGame(request->toGame)) {
+	if (!co_await m_DB.HasGame(request->toGame)) {
 		m_Socket.close();
 		std::println("[browser] unknown game {}", request->toGame);
 		co_return;
 	}
 
-	auto& game = m_DB.GetGame(request->toGame);
-	co_await StartEncryption(request->challenge, game);
+	const auto& game = co_await m_DB.GetGame(request->toGame);
+	co_await StartEncryption(request->challenge, *game);
 
-	auto header = PrepareServerListHeader(game, *request);
+	auto header = PrepareServerListHeader(*game, *request);
 	m_Cypher->encrypt(header);
 	co_await m_Socket.async_send(boost::asio::buffer(header), boost::asio::use_awaitable);
 
 	using Options = ServerListRequest::Options;
-	if (request->options & Options::NO_SERVER_LIST || game.Data().queryPort == 0xFFFF)
+	if (request->options & Options::no_server_list || game->queryPort() == 0xFFFF)
 		co_return;
 
-	if (request->options & Options::SEND_GROUPS)
+	if (request->options & Options::send_groups)
 		co_return; // not yet implemented
 	
 	std::uint16_t limit = 500;
@@ -121,10 +148,10 @@ boost::asio::awaitable<void> BrowserClient::HandleServerListRequest(const std::s
 	
 	constexpr bool usePopularFields = true;
 	std::vector<std::uint8_t> serverData;
-	for (auto& server : game.GetServers(request->serverFilter, request->fieldList, limit)) {
+	for (auto& server : co_await game->GetServers(request->serverFilter, request->fieldList, limit)) {
 		server.data["bf2_plasma"] = "1";
 		server.data["bf2_pure"] = "1";
-		serverData.append_range(PrepareServer(game, server, *request, usePopularFields));
+		serverData.append_range(PrepareServer(*game, server, *request, usePopularFields));
 	}
 
 	m_Cypher->encrypt(serverData);
@@ -147,7 +174,7 @@ std::vector<std::uint8_t> BrowserClient::PrepareServerListHeader(const Game& gam
 	std::vector<std::uint8_t> response;
 
 	response.append_range(m_Socket.remote_endpoint().address().to_v4().to_bytes());
-	auto queryPort = game.Data().queryPort;
+	auto queryPort = game.queryPort();
 	response.append_range(std::array{
 		(queryPort >> 8) & 0xFF,
 		(queryPort     ) & 0xFF
@@ -158,7 +185,7 @@ std::vector<std::uint8_t> BrowserClient::PrepareServerListHeader(const Game& gam
 		response.push_back(0);
 	}
 
-	if (request.options & ServerListRequest::Options::NO_SERVER_LIST || queryPort == 0xFFFF) {
+	if (request.options & ServerListRequest::Options::no_server_list || queryPort == 0xFFFF) {
 		return response;
 	}
 
@@ -167,7 +194,7 @@ std::vector<std::uint8_t> BrowserClient::PrepareServerListHeader(const Game& gam
 
 	response.push_back(request.fieldList.size() & 0xFF);
 	for (const auto& field : request.fieldList) {
-		response.push_back(std::to_underlying(game.Data().GetKeyType(field)));
+		response.push_back(std::to_underlying(game.GetParamType(field)));
 		response.append_range(field);
 		response.push_back(0);
 	}
@@ -186,28 +213,17 @@ std::vector<std::uint8_t> BrowserClient::PrepareServerListHeader(const Game& gam
 	return response;
 }
 
-std::vector<std::uint8_t> BrowserClient::PrepareServer(const Game& game, const Game::Server& server, const ServerListRequest& request, bool usePopularValues)
+std::vector<std::uint8_t> BrowserClient::PrepareServer(const Game& game, const Game::SavedServer& server, const ServerListRequest& request, bool usePopularValues)
 {
 	std::vector<std::uint8_t> bytes;
 	bytes.push_back(0); // flags
+	bytes.front() |= ServerOptions::unsolicited_udp;
 
-	enum Options : std::uint8_t {
-		UNSOLICITED_UDP           = 1,
-		PRIVATE_IP                = 2,
-		CONNECT_NEGOTIATE         = 4,
-		ICMP_IP                   = 8,
-		NON_STANDARD_PORT         = 16,
-		NON_STANDARD_PRIVATE_PORT = 32,
-		HAS_KEYS                  = 64,
-		HAS_FULL_RULES            = 128
-	};
-
-	bytes.front() |= Options::UNSOLICITED_UDP;
-
+	static_assert(sizeof(boost::asio::ip::address_v4::bytes_type) == 4, "gamespy expects exactly 4 bytes as the public IP");
 	bytes.append_range(boost::asio::ip::make_address_v4(server.public_ip).to_bytes());
 
-	if (server.public_port != game.Data().queryPort) {
-		bytes.front() |= Options::NON_STANDARD_PORT;
+	if (server.public_port != game.queryPort()) {
+		bytes.front() |= ServerOptions::non_standard_port;
 		bytes.append_range(std::array{
 			(server.public_port >> 8) & 0xFF,
 			(server.public_port) & 0xFF
@@ -215,12 +231,12 @@ std::vector<std::uint8_t> BrowserClient::PrepareServer(const Game& game, const G
 	}
 
 	if (!server.private_ip.empty()) {
-		bytes.front() |= Options::PRIVATE_IP;
+		bytes.front() |= ServerOptions::private_ip;
 		bytes.append_range(boost::asio::ip::make_address_v4(server.private_ip).to_bytes());
 	}
 
 	if (server.private_port) {
-		bytes.front() |= Options::NON_STANDARD_PRIVATE_PORT;
+		bytes.front() |= ServerOptions::non_standard_private_port;
 		bytes.append_range(std::array{
 			(server.private_port >> 8) & 0xFF,
 			(server.private_port) & 0xFF
@@ -229,24 +245,25 @@ std::vector<std::uint8_t> BrowserClient::PrepareServer(const Game& game, const G
 
 	if (const auto& natneg = server.data.find("natneg"); natneg != server.data.end()) {
 		if (natneg->second == "1")
-			bytes.front() |= Options::CONNECT_NEGOTIATE;
+			bytes.front() |= ServerOptions::connect_negotiate;
 	}
 	
 	if (!server.icmp_ip.empty()) {
-		bytes.front() |= Options::ICMP_IP;
+		bytes.front() |= ServerOptions::icmp_ip;
 		bytes.append_range(boost::asio::ip::make_address_v4(server.icmp_ip).to_bytes());
 	}
 
 	const auto& popularValues = game.GetPopularValues();
 	if (!server.data.empty())
-		bytes.front() |= Options::HAS_KEYS;
+		bytes.front() |= ServerOptions::has_keys;
 
-	using KeyType = GameData::KeyType;
 	for (const auto& key : request.fieldList) {
-		KeyType keyType = game.Data().GetKeyType(key);
+		auto keyType = game.GetParamType(key);
+		using SendType = decltype(keyType);
+
 		const auto& value = server.data.contains(key) ? server.data.at(key) : std::string{};
 		switch (keyType) {
-		case KeyType::STRING:
+		case SendType::as_string:
 		{
 			// instead of pushing the full value we can just add the values's position within the popular value list
 			if (usePopularValues) {
@@ -262,13 +279,12 @@ std::vector<std::uint8_t> BrowserClient::PrepareServer(const Game& game, const G
 			bytes.push_back(0x00);
 			break;
 		}
-		case KeyType::BYTE:
+		case SendType::as_byte:
 			bytes.push_back(std::stoi(value) & 0xFF);
 			break;
-		case KeyType::SHORT:
+		case SendType::as_short:
 		{
 			auto keyValue = static_cast<std::uint16_t>(std::stoi(value));
-			// Note: Little Endianess is expected
 			bytes.append_range(std::array{
 				(keyValue >> 8) & 0xFF,
 				(keyValue     ) & 0xFF
@@ -276,27 +292,27 @@ std::vector<std::uint8_t> BrowserClient::PrepareServer(const Game& game, const G
 			break;
 		}
 		default:
-			throw std::out_of_range{ "Unknown KeyType" };
+			throw std::out_of_range{ "Unknown SendType" };
 		}
 	}
 
-	if (!server.stats.empty()) {
-		bytes.front() |= Options::HAS_FULL_RULES;
-		bytes.append_range(server.stats);
+	if (!server.rules.empty()) {
+		bytes.front() |= ServerOptions::has_full_rules;
+		bytes.append_range(server.rules);
 		bytes.push_back(0x00);
 	}
 
 	return bytes;
 }
 
-std::string ExtractString(const ServerListRequest::bytes& packet, ServerListRequest::bytes::iterator& start)
+std::string_view ExtractString(const ServerListRequest::bytes& packet, ServerListRequest::bytes::iterator& start)
 {
 	const auto pkgEnd = packet.end();
 	const auto strEnd = std::find(start, pkgEnd, '\0');
 	if (strEnd == pkgEnd)
-		throw ServerListRequest::ParseError::INSUFFICIENT_LENGTH;
+		throw ServerListRequest::ParseError::insufficient_length;
 
-	auto res = std::string{ start, strEnd };
+	auto res = std::string_view{ reinterpret_cast<const char*>(&*start), reinterpret_cast<const char*>(&*strEnd) };
 	start = strEnd + 1;
 	return res;
 }
@@ -304,7 +320,7 @@ std::string ExtractString(const ServerListRequest::bytes& packet, ServerListRequ
 std::uint32_t ExtractUInt32(const ServerListRequest::bytes& packet, ServerListRequest::bytes::iterator& start)
 {
 	if (std::distance(start, packet.end()) < 4)
-		throw ServerListRequest::ParseError::INSUFFICIENT_LENGTH;
+		throw ServerListRequest::ParseError::insufficient_length;
 
 	return static_cast<std::uint32_t>((*start++ << 24) | (*start++ << 16) | (*start++ << 8) | *start++);
 }
@@ -313,20 +329,20 @@ std::expected<ServerListRequest, ServerListRequest::ParseError> ServerListReques
 	constexpr std::size_t MIN_SIZE = 
 		1 /* protocol */ + 1 /* encoding */ + 4 /* gameversion (integer) */ +
 		2 /* from-gamename (min 1 byte + terminator) */ + 2 /* to-gamename */ +
-		CHALLENGE_LENGTH /* client challenge */ + 1 /* query */ + 3 /* field list (\\-prefix + 1 byte + terminator) */ +
+		client_challenge_length /* client challenge */ + 1 /* query */ + 3 /* field list (\\-prefix + 1 byte + terminator) */ +
 		4 /* options (integer) */;
 	if (packet.size() < MIN_SIZE)
-		return std::unexpected(ParseError::INSUFFICIENT_LENGTH);
+		return std::unexpected(ParseError::insufficient_length);
 
 	auto packetIter = packet.begin();
 
 	auto protocol = static_cast<std::uint8_t>(*packetIter++);
-	if (protocol != 0x01)
-		return std::unexpected(ParseError::UNKNOWN_PROTOCOL_VERSION);
+	if (protocol != ::list_protocol_version)
+		return std::unexpected(ParseError::unknown_protocol_version);
 
 	auto encoding = static_cast<std::uint8_t>(*packetIter++);
-	if (encoding != 0x03)
-		return std::unexpected(ParseError::UNKNOWN_ENCODING_VERSION);
+	if (encoding != ::list_encoding_version)
+		return std::unexpected(ParseError::unknown_encoding_version);
 
 	// yup, thats right: exceptions used for control flow but they make the code much more readable and
 	// can hopefully be replaced by a operator-try in the future
@@ -338,35 +354,35 @@ std::expected<ServerListRequest, ServerListRequest::ParseError> ServerListReques
 		// the query is always CHALLENGE_LENGTH (8) bytes long, *not* null terminated (!) and 
 		// followed by the server-list-query which is null-terminated, but might be empty
 		auto challenge = ExtractString(packet, packetIter);
-		if (challenge.length() < CHALLENGE_LENGTH)
-			return std::unexpected(ParseError::INSUFFICIENT_LENGTH);
+		if (challenge.length() < client_challenge_length)
+			return std::unexpected(ParseError::insufficient_length);
 
-		const auto query = challenge.substr(CHALLENGE_LENGTH);
-		challenge.resize(CHALLENGE_LENGTH);
+		const auto query = challenge.substr(client_challenge_length);
+		challenge = challenge.substr(0, client_challenge_length);
 
-		auto fields = std::vector<std::string>{};
+		auto fields = std::vector<std::string_view>{};
 		{
-			std::string fieldStr = ExtractString(packet, packetIter);
+			auto fieldStr = ExtractString(packet, packetIter);
 			if (!fieldStr.empty() && fieldStr.front() != '\\')
-				return std::unexpected(ParseError::INVALID_KEY);
+				return std::unexpected(ParseError::invalid_key);
 
 			auto fieldNames = fieldStr.substr(1) // fields always start with '\\' which we need to remove before the split so we don't get an empty string
 				| std::views::split('\\')
-				| std::views::transform([](const auto& range) { return std::string{ range.begin(), range.end() }; });
+				| std::views::transform([](const auto& range) { return std::string_view{ range.begin(), range.end() }; });
 
 			fields.insert(fields.end(), std::make_move_iterator(fieldNames.begin()), std::make_move_iterator(fieldNames.end()));
 			if (fields.size() >= 255)
-				return std::unexpected(ParseError::TOO_MANY_KEYS);
+				return std::unexpected(ParseError::too_many_keys);
 		}
 
 		const auto options = ExtractUInt32(packet, packetIter);
 
 		auto alternateIP = std::optional<boost::asio::ip::address_v4>{};
-		if (options & std::to_underlying(Options::ALTERNATE_SOURCE_IP))
+		if (options & std::to_underlying(Options::alternate_source_ip))
 			alternateIP.emplace(ExtractUInt32(packet, packetIter));
 
 		auto limit = std::optional<std::uint32_t>{};
-		if (options & std::to_underlying(Options::LIMIT_RESULT_COUNT))
+		if (options & std::to_underlying(Options::limit_result_count))
 			limit.emplace(ExtractUInt32(packet, packetIter));
 
 		return ServerListRequest{
@@ -385,4 +401,27 @@ std::expected<ServerListRequest, ServerListRequest::ParseError> ServerListReques
 	catch (ParseError e) {
 		return std::unexpected(e);
 	}
+}
+
+namespace {
+#include <GameSpy/serverbrowsing/sb_internal.h>
+	static_assert(::list_protocol_version == LIST_PROTOCOL_VERSION, "LIST_PROTOCOL_VERSION value missmatch");
+	static_assert(::list_encoding_version == LIST_ENCODING_VERSION, "LIST_ENCODING_VERSION value missmatch");
+
+	// check Request Options bounds
+	static_assert(std::to_underlying(::RequestType::server_list_request) == SERVER_LIST_REQUEST, "SERVER_LIST_REQUEST value missmatch");
+	static_assert(std::to_underlying(::RequestType::playersearch_request) == PLAYERSEARCH_REQUEST, "PLAYERSEARCH_REQUEST value missmatch");
+
+	static_assert(ServerListRequest::client_challenge_length == LIST_CHALLENGE_LEN, "the crypt key length must match the gamespy definition");
+
+	// check ServerListRequest Options bounds
+	static_assert(std::to_underlying(ServerListRequest::Options::send_fields_for_all) == SEND_FIELDS_FOR_ALL, "SEND_FIELDS_FOR_ALL value missmatch");
+	static_assert(std::to_underlying(ServerListRequest::Options::limit_result_count) == LIMIT_RESULT_COUNT, "SEND_FIELDS_FOR_ALL value missmatch");
+
+	// check Server Options bounds
+	static_assert(std::to_underlying(::ServerOptions::unsolicited_udp) == UNSOLICITED_UDP_FLAG, "UNSOLICITED_UDP_FLAG value missmatch");
+	static_assert(std::to_underlying(::ServerOptions::has_full_rules) == HAS_FULL_RULES_FLAG, "HAS_FULL_RULES_FLAG value missmatch");
+
+	// check Backend Options bounds
+	static_assert(std::to_underlying(GameData::BackendOptions::qr2_use_query_challenge) == QR2_USE_QUERY_CHALLENGE, "QR2_USE_QUERY_CHALLENGE value missmatch");
 }

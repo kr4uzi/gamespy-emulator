@@ -25,23 +25,23 @@
     <Filter Include="Header Files\crypto">
       <UniqueIdentifier>{19ce4765-9e41-496c-990d-e586df2fd40e}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Source Files\login">
-      <UniqueIdentifier>{a790a816-b6cc-4fab-8d64-216f8a77a898}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Source Files\dns">
-      <UniqueIdentifier>{c090d912-f340-48ec-9974-b17f5d4058ba}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Header Files\login">
-      <UniqueIdentifier>{164db4a7-6620-45de-96a8-154c1fdb81f4}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Header Files\dns">
-      <UniqueIdentifier>{d3ccc413-98bd-41dc-9409-94eaa37a8c59}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Header Files\gamespy">
       <UniqueIdentifier>{83854c5f-804c-485d-ba7a-653dfcfec6c0}</UniqueIdentifier>
     </Filter>
     <Filter Include="Source Files\gamespy">
       <UniqueIdentifier>{4b4e76cd-edea-4999-a8bf-f11600a0ace2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\presence">
+      <UniqueIdentifier>{164db4a7-6620-45de-96a8-154c1fdb81f4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\presence">
+      <UniqueIdentifier>{a790a816-b6cc-4fab-8d64-216f8a77a898}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\games">
+      <UniqueIdentifier>{ce9817a9-5808-40b7-8755-ef3b38c0bd8d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\games">
+      <UniqueIdentifier>{861b507f-a34f-4471-89bb-0d78e97595de}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -69,32 +69,23 @@
     <ClInclude Include="playerdb.h">
       <Filter>Header Files\database</Filter>
     </ClInclude>
-    <ClInclude Include="dns.h">
-      <Filter>Header Files\dns</Filter>
-    </ClInclude>
-    <ClInclude Include="dns_details.h">
-      <Filter>Header Files\dns</Filter>
-    </ClInclude>
     <ClInclude Include="gpcm.client.h">
-      <Filter>Header Files\login</Filter>
+      <Filter>Header Files\presence</Filter>
     </ClInclude>
     <ClInclude Include="gpcm.h">
-      <Filter>Header Files\login</Filter>
+      <Filter>Header Files\presence</Filter>
     </ClInclude>
     <ClInclude Include="gpsp.client.h">
-      <Filter>Header Files\login</Filter>
+      <Filter>Header Files\presence</Filter>
     </ClInclude>
     <ClInclude Include="gpsp.h">
-      <Filter>Header Files\login</Filter>
+      <Filter>Header Files\presence</Filter>
     </ClInclude>
     <ClInclude Include="master.h">
       <Filter>Header Files\gamespy</Filter>
     </ClInclude>
     <ClInclude Include="qr.h">
       <Filter>Header Files\gamespy</Filter>
-    </ClInclude>
-    <ClInclude Include="textpacket.h">
-      <Filter>Header Files\login</Filter>
     </ClInclude>
     <ClInclude Include="sqlite.h">
       <Filter>Header Files\database</Filter>
@@ -111,10 +102,7 @@
     <ClInclude Include="playerdb.mysql.h">
       <Filter>Header Files\database</Filter>
     </ClInclude>
-    <ClInclude Include="config.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="server.h">
+    <ClInclude Include="emulator.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="stats.h">
@@ -122,6 +110,12 @@
     </ClInclude>
     <ClInclude Include="stats.client.h">
       <Filter>Header Files\gamespy</Filter>
+    </ClInclude>
+    <ClInclude Include="bf2.h">
+      <Filter>Header Files\games</Filter>
+    </ClInclude>
+    <ClInclude Include="game.h">
+      <Filter>Header Files\games</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -150,31 +144,22 @@
       <Filter>Source Files\database</Filter>
     </ClCompile>
     <ClCompile Include="gpcm.cpp">
-      <Filter>Source Files\login</Filter>
+      <Filter>Source Files\presence</Filter>
     </ClCompile>
     <ClCompile Include="gpsp.client.cpp">
-      <Filter>Source Files\login</Filter>
+      <Filter>Source Files\presence</Filter>
     </ClCompile>
     <ClCompile Include="gpsp.cpp">
-      <Filter>Source Files\login</Filter>
+      <Filter>Source Files\presence</Filter>
     </ClCompile>
     <ClCompile Include="gpcm.client.cpp">
-      <Filter>Source Files\login</Filter>
-    </ClCompile>
-    <ClCompile Include="dns_details.cpp">
-      <Filter>Source Files\dns</Filter>
-    </ClCompile>
-    <ClCompile Include="dns.cpp">
-      <Filter>Source Files\dns</Filter>
+      <Filter>Source Files\presence</Filter>
     </ClCompile>
     <ClCompile Include="master.cpp">
       <Filter>Source Files\gamespy</Filter>
     </ClCompile>
     <ClCompile Include="qr.cpp">
       <Filter>Source Files\gamespy</Filter>
-    </ClCompile>
-    <ClCompile Include="textpacket.cpp">
-      <Filter>Source Files\login</Filter>
     </ClCompile>
     <ClCompile Include="sqlite.cpp">
       <Filter>Source Files\database</Filter>
@@ -188,10 +173,7 @@
     <ClCompile Include="playerdb.mysql.cpp">
       <Filter>Source Files\database</Filter>
     </ClCompile>
-    <ClCompile Include="config.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="server.cpp">
+    <ClCompile Include="emulator.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="stats.cpp">
@@ -199,6 +181,12 @@
     </ClCompile>
     <ClCompile Include="stats.client.cpp">
       <Filter>Source Files\gamespy</Filter>
+    </ClCompile>
+    <ClCompile Include="game.cpp">
+      <Filter>Source Files\games</Filter>
+    </ClCompile>
+    <ClCompile Include="bf2.cpp">
+      <Filter>Source Files\games</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>

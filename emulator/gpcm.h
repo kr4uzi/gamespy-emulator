@@ -4,6 +4,10 @@
 namespace gamespy {
 	class GameDB;
 	class PlayerDB;
+
+	// gpcm = gamespy conneciton manager
+	// the data model is actually (we only implemented basic battlefield 2 support):
+	// User (email, password) <-> Profile (nickname) <-> Uniquenick (namespace)
 	class LoginServer {
 		static constexpr std::uint16_t PORT = 29900; // gpcm.gamespy.com
 		boost::asio::ip::tcp::acceptor m_Acceptor;
