@@ -1,0 +1,56 @@
+crash when first medal:
+---------------------------
+BF2 Error
+---------------------------
+Debug assertion failed!
+
+Version: 1.5.3153-802.0 Build date:2009-8-20 18:8
+Module: RendDX9
+File: C:\dice\Projects\BF2Branches\Patch_1_50\Code\BF2\RendDX9\TextureManager.cpp
+Line: 761
+
+Text: Texture not found: menu/hud/texture/ingame/generalicons/medals/award_name_1261105_1
+
+Current confile:
+
+---------------------------
+Cancel   Try Again   Continue   
+---------------------------
+
+
+---------------------------
+BF2 Error
+---------------------------
+Debug assertion failed!
+
+Version: 1.5.3153-802.0 Build date:2009-8-20 18:8
+Module: RendDX9
+File: C:\dice\Projects\BF2Branches\Patch_1_50\Code\BF2\RendDX9\TextureManager.cpp
+Line: 761
+
+Text: Texture not found: menu/hud/texture/ingame/generalicons/medals/award_name_1261113_1
+
+Current confile:
+
+---------------------------
+Cancel   Try Again   Continue   
+---------------------------
+
+
+---------------------------
+BF2 Error
+---------------------------
+Debug assertion failed!
+
+Version: 1.5.3153-802.0 Build date:2009-8-20 18:8
+Module: RendDX9
+File: C:\dice\Projects\BF2Branches\Patch_1_50\Code\BF2\RendDX9\TextureManager.cpp
+Line: 761
+
+Text: Texture not found: menu/hud/texture/ingame/generalicons/medals/award_name_1261109_1
+
+Current confile:
+
+---------------------------
+Cancel   Try Again   Continue   
+---------------------------

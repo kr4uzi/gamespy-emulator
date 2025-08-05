@@ -1,0 +1,20 @@
+happened some timer after my client was crashing due to medal error:
+\disc\\pid\1059\cd\bab722e090b0b64ef79dd57d8cd6c4c4\ip\167773434
+
+---------------------------
+BF2 Error
+---------------------------
+Debug assertion failed!
+
+Version: 1.5.3153-802.0 Build date:2009-8-20 18:8
+Module: RendDX9
+File: C:\dice\Projects\BF2Branches\Patch_1_50\Code\BF2\RendDX9\TextureManager.cpp
+Line: 761
+
+Text: Texture not found: menu/hud/texture/ingame/generalicons/medals/award_name_1261119_1
+
+Current confile:
+
+---------------------------
+Cancel   Try Again   Continue   
+---------------------------

@@ -1,0 +1,67 @@
+investigating lan broadcasts because this might help to enable "mods via internet" (server running mods crash when internet=1):
+
+the client sends udb broadcast to port 29900 to 29950
+29900: 02 00 00 00 45 00 00 24 8b ae 00 00 80 11 00 00 c0 a8 b2 29 ff ff ff ff da 13 74 cc 00 10 3d 1e fe fd 02 00 00 00 00 00
+29901: 02 00 00 00 45 00 00 24 8b af 00 00 80 11 00 00 c0 a8 b2 29 ff ff ff ff da 13 74 cd 00 10 3d 1d fe fd 02 00 00 00 00 00
+.....                            ae+x                                                              1e+x
+29949: 02 00 00 00 45 00 00 24 8b df 00 00 80 11 00 00 c0 a8 b2 29 ff ff ff ff da 13 74 fd 00 10 3c ed fe fd 02 00 00 00 00 00
+29950: 02 00 00 00 45 00 00 24 8b e0 00 00 80 11 00 00 c0 a8 b2 29 ff ff ff ff da 13 74 fe 00 10 3c ec fe fd 02 00 00 00 00 00
+
+servers respond this message when quieried by the client:
+0000   02 00 00 00 45 00 03 87 6c b0 00 00 80 11 00 00   ....E...l.......
+0010   c0 a8 b2 29 c0 a8 b2 29 74 cc da 12 03 73 de 1c   ...)...)t....s..
+0020   00 5f a8 ee 00 73 70 6c 69 74 6e 75 6d 00 80 00   ._...splitnum...
+0030   68 6f 73 74 6e 61 6d 65 00 42 46 32 20 73 65 72   hostname.BF2 ser
+0040   76 65 72 20 6f 6e 20 75 6e 6b 6e 6f 77 6e 00 67   ver on unknown.g
+0050   61 6d 65 6e 61 6d 65 00 62 61 74 74 6c 65 66 69   amename.battlefi
+0060   65 6c 64 32 00 67 61 6d 65 76 65 72 00 31 2e 35   eld2.gamever.1.5
+0070   2e 33 31 35 33 2d 38 30 32 2e 30 00 6d 61 70 6e   .3153-802.0.mapn
+0080   61 6d 65 00 53 74 72 69 6b 65 20 41 74 20 4b 61   ame.Strike At Ka
+0090   72 6b 61 6e 64 00 67 61 6d 65 74 79 70 65 00 67   rkand.gametype.g
+00a0   70 6d 5f 63 71 00 67 61 6d 65 76 61 72 69 61 6e   pm_cq.gamevarian
+00b0   74 00 62 66 32 00 6e 75 6d 70 6c 61 79 65 72 73   t.bf2.numplayers
+00c0   00 30 00 6d 61 78 70 6c 61 79 65 72 73 00 31 36   .0.maxplayers.16
+00d0   00 67 61 6d 65 6d 6f 64 65 00 6f 70 65 6e 70 6c   .gamemode.openpl
+00e0   61 79 69 6e 67 00 70 61 73 73 77 6f 72 64 00 30   aying.password.0
+00f0   00 74 69 6d 65 6c 69 6d 69 74 00 30 00 72 6f 75   .timelimit.0.rou
+0100   6e 64 74 69 6d 65 00 33 00 68 6f 73 74 70 6f 72   ndtime.3.hostpor
+0110   74 00 31 36 35 36 37 00 62 66 32 5f 64 65 64 69   t.16567.bf2_dedi
+0120   63 61 74 65 64 00 31 00 62 66 32 5f 72 61 6e 6b   cated.1.bf2_rank
+0130   65 64 00 30 00 62 66 32 5f 61 6e 74 69 63 68 65   ed.0.bf2_antiche
+0140   61 74 00 30 00 62 66 32 5f 6f 73 00 77 69 6e 33   at.0.bf2_os.win3
+0150   32 00 62 66 32 5f 61 75 74 6f 72 65 63 00 30 00   2.bf2_autorec.0.
+0160   62 66 32 5f 64 5f 69 64 78 00 00 62 66 32 5f 64   bf2_d_idx..bf2_d
+0170   5f 64 6c 00 00 62 66 32 5f 76 6f 69 70 00 31 00   _dl..bf2_voip.1.
+0180   62 66 32 5f 61 75 74 6f 62 61 6c 61 6e 63 65 64   bf2_autobalanced
+0190   00 30 00 62 66 32 5f 66 72 69 65 6e 64 6c 79 66   .0.bf2_friendlyf
+01a0   69 72 65 00 31 00 62 66 32 5f 74 6b 6d 6f 64 65   ire.1.bf2_tkmode
+01b0   00 4e 6f 20 50 75 6e 69 73 68 00 62 66 32 5f 73   .No Punish.bf2_s
+01c0   74 61 72 74 64 65 6c 61 79 00 32 00 62 66 32 5f   tartdelay.2.bf2_
+01d0   73 70 61 77 6e 74 69 6d 65 00 35 2e 30 30 30 30   spawntime.5.0000
+01e0   30 30 00 62 66 32 5f 73 70 6f 6e 73 6f 72 74 65   00.bf2_sponsorte
+01f0   78 74 00 00 62 66 32 5f 73 70 6f 6e 73 6f 72 6c   xt..bf2_sponsorl
+0200   6f 67 6f 5f 75 72 6c 00 00 62 66 32 5f 63 6f 6d   ogo_url..bf2_com
+0210   6d 75 6e 69 74 79 6c 6f 67 6f 5f 75 72 6c 00 00   munitylogo_url..
+0220   62 66 32 5f 73 63 6f 72 65 6c 69 6d 69 74 00 30   bf2_scorelimit.0
+0230   00 62 66 32 5f 74 69 63 6b 65 74 72 61 74 69 6f   .bf2_ticketratio
+0240   00 31 30 30 00 62 66 32 5f 74 65 61 6d 72 61 74   .100.bf2_teamrat
+0250   69 6f 00 31 30 30 2e 30 30 30 30 30 30 00 62 66   io.100.000000.bf
+0260   32 5f 74 65 61 6d 31 00 4d 45 43 00 62 66 32 5f   2_team1.MEC.bf2_
+0270   74 65 61 6d 32 00 55 53 00 62 66 32 5f 62 6f 74   team2.US.bf2_bot
+0280   73 00 30 00 62 66 32 5f 70 75 72 65 00 31 00 62   s.0.bf2_pure.1.b
+0290   66 32 5f 6d 61 70 73 69 7a 65 00 33 32 00 62 66   f2_mapsize.32.bf
+02a0   32 5f 67 6c 6f 62 61 6c 75 6e 6c 6f 63 6b 73 00   2_globalunlocks.
+02b0   30 00 62 66 32 5f 66 70 73 00 00 62 66 32 5f 70   0.bf2_fps..bf2_p
+02c0   6c 61 73 6d 61 00 30 00 62 66 32 5f 72 65 73 65   lasma.0.bf2_rese
+02d0   72 76 65 64 73 6c 6f 74 73 00 30 00 62 66 32 5f   rvedslots.0.bf2_
+02e0   63 6f 6f 70 62 6f 74 72 61 74 69 6f 00 00 62 66   coopbotratio..bf
+02f0   32 5f 63 6f 6f 70 62 6f 74 63 6f 75 6e 74 00 00   2_coopbotcount..
+0300   62 66 32 5f 63 6f 6f 70 62 6f 74 64 69 66 66 00   bf2_coopbotdiff.
+0310   00 62 66 32 5f 6e 6f 76 65 68 69 63 6c 65 73 00   .bf2_novehicles.
+0320   30 00 00 01 70 6c 61 79 65 72 5f 00 00 00 73 63   0...player_...sc
+0330   6f 72 65 5f 00 00 00 70 69 6e 67 5f 00 00 00 74   ore_...ping_...t
+0340   65 61 6d 5f 00 00 00 64 65 61 74 68 73 5f 00 00   eam_...deaths_..
+0350   00 70 69 64 5f 00 00 00 73 6b 69 6c 6c 5f 00 00   .pid_...skill_..
+0360   00 41 49 42 6f 74 5f 00 00 00 00 02 74 65 61 6d   .AIBot_.....team
+0370   5f 74 00 00 4d 45 43 00 55 53 00 00 73 63 6f 72   _t..MEC.US..scor
+0380   65 5f 74 00 00 30 00 30 00 00 00                  e_t..0.0...
