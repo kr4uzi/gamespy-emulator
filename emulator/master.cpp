@@ -101,9 +101,10 @@ boost::asio::awaitable<void> MasterServer::HandleHeartbeat(const udp::endpoint& 
 
 	auto game = co_await m_DB.GetGame(gamename);
 	if (m_Validated.contains(client)) {
+		auto addr = client.address().to_string();
 		auto server = Game::IncomingServer{
 			.last_update = Clock::now(),
-			.public_ip = client.address().to_string(),
+			.public_ip = addr,
 			.public_port = client.port(),
 			.data = packet->serverData
 		};
@@ -176,9 +177,10 @@ boost::asio::awaitable<void> MasterServer::HandleChallenge(const udp::endpoint& 
 
 			co_await m_Socket.async_send_to(boost::asio::buffer(response), client, boost::asio::use_awaitable);
 
+			auto addr = client.address().to_string();
 			auto server = Game::IncomingServer{
 				.last_update = iter->second.last_update,
-				.public_ip = client.address().to_string(),
+				.public_ip = addr,
 				.public_port = client.port(),
 				.data = std::map<std::string_view, std::string_view>{ std::from_range, iter->second.values }
 			};

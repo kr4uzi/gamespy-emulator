@@ -5,6 +5,7 @@
 #include "game.h"
 #include "asio.h"
 #include <boost/mysql.hpp>
+#include <optional>
 
 namespace gamespy
 {
@@ -23,15 +24,17 @@ namespace gamespy
 	private:
 		boost::asio::ssl::context m_SSL;
 		boost::mysql::tcp_ssl_connection m_Conn;
-		ConnectionParams m_Params;
+		std::optional<ConnectionParams> m_Params;
 
 	public:
+		BF2(boost::asio::io_context& context);
 		BF2(boost::asio::io_context& context, ConnectionParams params);
 		~BF2();
 
 		virtual task<void> Connect() override;
 		virtual task<void> Disconnect() override;
 
+		virtual task<void> AddOrUpdateServer(IncomingServer& server) override;
 		virtual task<std::vector<SavedServer>> GetServers(const std::string_view& query, const std::vector<std::string_view>& fields, std::size_t limit) override;
 	};
 }

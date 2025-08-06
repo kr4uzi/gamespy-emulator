@@ -14,6 +14,6 @@ if not defined BF2Dir (
 )
 
 PUSHD "%BF2Dir%"
-"%~dp0withdll32.exe" /d:"%~dp0redirect32.dll" BF2.exe +menu 1 +fullscreen 0 +restart +szx 800 +szy 600
+"%~dp0withdll32.exe" /d:"%~dp0redirect32.dll" BF2.exe +modPath mods/bf2all64 +menu 1 +fullscreen 0 +restart +szx 1920 +szy 1200
 POPD
 endlocal

@@ -1,4 +1,6 @@
 #pragma once
+#ifndef _GAMESPY_UTILS_H_
+#define _GAMESPY_UTILS_H_
 
 #include <string>
 #include <string_view>
@@ -8,8 +10,10 @@
 #include <expected>
 #include <optional>
 #include <ranges>
+#include <chrono>
 
 namespace gamespy {
+	using Clock = std::chrono::system_clock;
 	namespace utils {
 		std::string random_string(const std::string& table, std::string::size_type len);
 
@@ -47,5 +51,10 @@ namespace gamespy {
 
 		template<>
 		std::optional<std::uint32_t> value_for_key(const std::span<const char>& textPacket, const std::string_view& key);
+
+		std::uint32_t to_date(const Clock::time_point& timepoint);
+		Clock::time_point from_date(std::uint32_t gsDate);
 	}
 }
+
+#endif

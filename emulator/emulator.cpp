@@ -100,8 +100,10 @@ task<void> Emulator::InitGameDB(int argc, char* argv[])
 		}
 	}
 
-	if (!m_GameDB)
-		throw std::runtime_error{ "no game database configured. please use -gamedb=<file>" };
+	if (!m_GameDB) {
+		std::println("[gamedb] no gamedb configured, using fallback");
+		m_GameDB = std::make_unique<GameDBInMemory>(m_Context);
+	}
 
 	co_await m_GameDB->Connect();
 }

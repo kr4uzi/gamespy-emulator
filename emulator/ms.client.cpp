@@ -148,11 +148,8 @@ boost::asio::awaitable<void> BrowserClient::HandleServerListRequest(const std::s
 	
 	constexpr bool usePopularFields = true;
 	std::vector<std::uint8_t> serverData;
-	for (auto& server : co_await game->GetServers(request->serverFilter, request->fieldList, limit)) {
-		server.data["bf2_plasma"] = "1";
-		server.data["bf2_pure"] = "1";
+	for (auto& server : co_await game->GetServers(request->serverFilter, request->fieldList, limit))
 		serverData.append_range(PrepareServer(*game, server, *request, usePopularFields));
-	}
 
 	m_Cypher->encrypt(serverData);
 	co_await m_Socket.async_send(boost::asio::buffer(serverData), boost::asio::use_awaitable);
@@ -194,7 +191,8 @@ std::vector<std::uint8_t> BrowserClient::PrepareServerListHeader(const Game& gam
 
 	response.push_back(request.fieldList.size() & 0xFF);
 	for (const auto& field : request.fieldList) {
-		response.push_back(std::to_underlying(game.GetParamType(field)));
+		auto sendType = game.GetParamSendType(field);
+		response.push_back(std::to_underlying(sendType));
 		response.append_range(field);
 		response.push_back(0);
 	}
@@ -258,11 +256,12 @@ std::vector<std::uint8_t> BrowserClient::PrepareServer(const Game& game, const G
 		bytes.front() |= ServerOptions::has_keys;
 
 	for (const auto& key : request.fieldList) {
-		auto keyType = game.GetParamType(key);
-		using SendType = decltype(keyType);
+		// because the value-list must match the key-list, we also need to send Send::no_send keys - but empty
+		auto sendAs = game.GetParamSendType(key);
+		using SendType = decltype(sendAs);
 
 		const auto& value = server.data.contains(key) ? server.data.at(key) : std::string{};
-		switch (keyType) {
+		switch (sendAs) {
 		case SendType::as_string:
 		{
 			// instead of pushing the full value we can just add the values's position within the popular value list
@@ -424,4 +423,11 @@ namespace {
 
 	// check Backend Options bounds
 	static_assert(std::to_underlying(GameData::BackendOptions::qr2_use_query_challenge) == QR2_USE_QUERY_CHALLENGE, "QR2_USE_QUERY_CHALLENGE value missmatch");
+}
+
+namespace {
+#include <GameSpy/serverbrowsing/sb_internal.h>
+	static_assert(KEYTYPE_STRING == std::to_underlying(Game::KeyType::Send::as_string), "KEYTYPE_STRING missmatch");
+	static_assert(KEYTYPE_BYTE == std::to_underlying(Game::KeyType::Send::as_byte), "KEYTYPE_BYTE missmatch");
+	static_assert(KEYTYPE_SHORT == std::to_underlying(Game::KeyType::Send::as_short), "KEYTYPE_SHORT missmatch");
 }

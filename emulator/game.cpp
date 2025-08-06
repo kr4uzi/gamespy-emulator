@@ -1,5 +1,6 @@
 #include "game.h"
 #include <print>
+#include <iostream>
 using namespace gamespy;
 
 namespace {
@@ -60,7 +61,7 @@ task<void> Game::Connect()
 	)SQL";
 
 	m_DB.exec(sql);
-	std::println("[{}] registered - {}", m_Data.name, GetMasterServer());
+	std::println("[{}] registered - {}", name(), GetMasterServer());
 	co_return;
 }
 
@@ -91,13 +92,22 @@ bool Game::IsValidParamName(const std::string_view& paramName)
 	return !paramName.starts_with("__");
 }
 
-auto Game::GetParamType(const std::string_view& keyName) const -> GameData::GameKey::Send
+auto Game::GetParamSendType(const std::string_view& keyName) const -> KeyType::Send
 {
 	auto iter = m_Params.find(keyName);
 	if (iter == m_Params.end())
-		return GameData::GameKey::Send::as_string;
+		return KeyType::Send::as_string;
 
 	return iter->second->send;
+}
+
+auto Game::GetParamStoreType(const std::string_view& keyName) const -> KeyType::Store
+{
+	auto iter = m_Params.find(keyName);
+	if (iter == m_Params.end())
+		return KeyType::Store::as_text;
+
+	return iter->second->store;
 }
 
 task<void> Game::AddOrUpdateServer(IncomingServer& server)
@@ -157,7 +167,7 @@ task<void> Game::AddOrUpdateServer(IncomingServer& server)
 				&& (dbName == "temp" || dbName == "main"))
 				return auth_res::SQLITE_OK;
 
-			std::println("[gamedb][{}][columns]unauthorized: action({}) detail1({}), detail2({}), db({}), trigger({})", m_Data.name, std::to_underlying(action), detail1, detail2, dbName, trigger);
+			std::println(std::cerr, "[{}][columns] unauthorized: action({}) detail1({}), detail2({}), db({}), trigger({})", name(), std::to_underlying(action), detail1, detail2, dbName, trigger);
 			// this will make the stmt throw an error
 			return sqlite::auth_res::SQLITE_DENY;
 		});
@@ -178,12 +188,13 @@ task<void> Game::AddOrUpdateServer(IncomingServer& server)
 		stmt.bind_at(i + 3, valuesToInsert[i]);
 
 	stmt.insert();
+
+	// required to make this a coroutine
 	co_return;
 }
 
 task<std::vector<Game::SavedServer>> Game::GetServers(const std::string_view& query, const std::vector<std::string_view>& fields, std::size_t limit)
 {
-	std::println("GetServers: {}", query);
 	auto error = std::string{};
 
 	auto sql = std::string{ "SELECT __last_update,__public_ip,__public_port" };
@@ -201,7 +212,7 @@ task<std::vector<Game::SavedServer>> Game::GetServers(const std::string_view& qu
 		else if (action == auth_action::SQLITE_FUNCTION && (detail2 == "like"))
 			return auth_res::SQLITE_OK;
 
-		std::println("[gamedb][{}][retrieve] unauthorized: action({}) detail1({}), detail2({}), db({}), trigger({})", m_Data.name, std::to_underlying(action), detail1, detail2, dbName, trigger);
+		std::println(std::cerr, "[{}][retrieve] unauthorized: action({}) detail1({}), detail2({}), db({}), trigger({})", name(), std::to_underlying(action), detail1, detail2, dbName, trigger);
 		return auth_res::SQLITE_DENY;
 	});
 
@@ -212,19 +223,25 @@ task<std::vector<Game::SavedServer>> Game::GetServers(const std::string_view& qu
 	sql += std::format(" LIMIT {}", limit);
 
 	auto servers = std::vector<Game::SavedServer>{};
-	auto stmt = sqlite::stmt{ m_DB, sql };
-	while (stmt.query()) {
-		auto lastUpdated = stmt.column_at<std::time_t>(0);
-		auto server = Game::SavedServer{
-			.last_update = Clock::from_time_t(lastUpdated),
-			.public_ip = stmt.column_at<std::string>(1),
-			.public_port = stmt.column_at<std::uint16_t>(2)
-		};
 
-		for (std::size_t i = 0; i < fields.size(); i++)
-			server.data.emplace(fields[i], stmt.column_at<std::string>(i + 3));
+	try {
+		auto stmt = sqlite::stmt{ m_DB, sql };
+		while (stmt.query()) {
+			auto lastUpdated = stmt.column_at<std::time_t>(0);
+			auto server = Game::SavedServer{
+				.last_update = Clock::from_time_t(lastUpdated),
+				.public_ip = stmt.column_at<std::string>(1),
+				.public_port = stmt.column_at<std::uint16_t>(2)
+			};
 
-		servers.push_back(server);
+			for (std::size_t i = 0; i < fields.size(); i++)
+				server.data.emplace(fields[i], stmt.column_at<std::string>(i + 3));
+
+			servers.push_back(server);
+		}
+	}
+	catch (const std::exception& e) {
+		std::println(std::cerr, "[{}] failed to query servers (query={}): {}", name(), query, e.what());
 	}
 
 	co_return servers;

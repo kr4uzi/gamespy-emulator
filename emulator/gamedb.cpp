@@ -13,6 +13,12 @@ GameDB::~GameDB()
 
 }
 
+GameDBInMemory::GameDBInMemory(boost::asio::io_context& context)
+	: GameDB{ }, m_Context{ context }
+{
+
+}
+
 GameDBInMemory::GameDBInMemory(boost::asio::io_context& context, nlohmann::json config)
 	: GameDB{ }, m_Context{ context }, m_Config(std::move(config))
 {
@@ -35,8 +41,8 @@ task<void> GameDBInMemory::Connect()
 			GameData::GameKey gk;
 			gk.name = key;
 			if (std::find(ignoredKeys.begin(), ignoredKeys.end(), key) != ignoredKeys.end()) {
-				gk.send = GameData::GameKey::Send::no_send;
-				gk.store = GameData::GameKey::Store::no_store;
+				gk.send = GameData::GameKey::Send::as_string;
+				gk.store = GameData::GameKey::Store::as_text;
 			}
 			else {
 				if (std::find(sendAsShort.begin(), sendAsShort.end(), key) != sendAsShort.end())
@@ -55,6 +61,13 @@ task<void> GameDBInMemory::Connect()
 
 		return out;
 	};
+
+	if (m_Config.empty()) {
+		auto bf2 = std::make_shared<BF2>(m_Context);
+		co_await bf2->Connect();
+		m_Games.emplace("battlefield2", bf2);
+		co_return;
+	}
 
 	for (const auto& entry : m_Config) {
 		auto name = entry.at("name").get<std::string>();

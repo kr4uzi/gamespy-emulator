@@ -177,8 +177,31 @@ std::optional<std::uint32_t> utils::value_for_key(const std::span<const char>& _
 	std::uint32_t result;
 	auto end = value->data() + value->size();
 	auto [ptr, ec] = std::from_chars(value->data(), end, result);
-	if (ec != std::errc{} || ptr == end)
+	if (ec != std::errc{} || ptr != end)
 		return std::nullopt;
 
 	return result;
+}
+
+std::uint32_t utils::to_date(const Clock::time_point& timepoint)
+{
+	auto ymd = std::chrono::year_month_day{ std::chrono::floor<std::chrono::days>(timepoint) };
+	auto year = static_cast<int>(ymd.year());
+	if (year < 0)
+		year = 2014; // gamespy death: 2014-05-31
+
+	return (static_cast<std::uint32_t>(ymd.day()) << 24)
+		| (static_cast<std::uint32_t>(ymd.month()) << 16)
+		| static_cast<std::uint16_t>(year);
+}
+
+Clock::time_point utils::from_date(std::uint32_t gsDate)
+{
+	auto ymd = std::chrono::year_month_day{
+		std::chrono::year { (gsDate &     0xFFFF) },
+		std::chrono::month{ (gsDate &   0xFF0000) >> 16 },
+		std::chrono::day  { (gsDate & 0xFF000000) >> 24 }
+	};
+
+	return std::chrono::sys_days{ ymd };
 }

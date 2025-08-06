@@ -35,17 +35,18 @@ boost::asio::awaitable<void> SearchClient::HandleSearchNicks(const std::span<con
 		co_return;
 	}
 
+	// note: we should not send and error but those results: GameSpy/GP/gp.h:253
 	const auto emailNormalized = *email | std::views::transform((int(*)(int))std::tolower) | std::ranges::to<std::string>();
 	const auto& players = co_await m_DB.GetPlayerByMailAndPassword(emailNormalized, passwordMD5);
 	if (players.empty())
 		co_await SendError(551, "Unable to get any associated profiles.", true);
 	else {
-		auto response = std::format(R"(\nr\{})", players.size());
+		auto response = std::string{ "\\nr\\0" };
 
 		for (const auto& player : players)
-			response += R"(\nick\)" + player.name + R"(\uniquenick\)" + player.name;
+			response += "\\nick\\" + player.name + "\\uniquenick\\" + player.name;
 
-		response += R"(\ndone\final\)";
+		response += R"(\ndone\\final\)";
 		co_await m_Socket.async_send(boost::asio::buffer(response), boost::asio::use_awaitable);
 	}	
 }

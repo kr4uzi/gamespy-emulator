@@ -96,7 +96,7 @@ boost::asio::awaitable<void> LoginClient::HandleLogin(const std::span<const char
 	m_PlayerData->session = session.checksum();
 
 	auto proof = utils::generate_challenge(m_PlayerData->name, player->password, m_ServerChallenge, *clientChallenge);
-	auto response = std::format(R"(\lc\2\sesskey\{}\userid\{}\profileid\{}\uniquenick\{}\lt\{}\proof\id\{}\final\)",
+	auto response = std::format(R"(\lc\2\sesskey\{}\userid\{}\profileid\{}\uniquenick\{}\lt\{}\proof\{}\\id\{}\final\)",
 		m_PlayerData->session, m_PlayerData->GetUserID(), m_PlayerData->GetProfileID(), player->name, m_LoginTicket, proof, requestId
 	);
 	co_await m_Socket.async_send(boost::asio::buffer(response), boost::asio::use_awaitable);
@@ -249,7 +249,8 @@ boost::asio::awaitable<void> LoginClient::SendError(std::uint32_t requestId, std
 
 boost::asio::awaitable<void> LoginClient::SendPlayerData(std::uint32_t requestId)
 {
-	auto response = std::format(R"(\pi\\profileid\{}\nick\{}\userid\{}\email\{}\sig\{}\uniquenick\{}\firstname\\lastname\\countrycode\{}\birthday\1401530400\lon\0.000000\lat\0.000000\loc\\id\{}\final\)",
-		m_PlayerData->GetProfileID(), m_PlayerData->name, m_PlayerData->GetUserID(), m_PlayerData->email, m_LoginTicket, m_PlayerData->name, m_PlayerData->country, requestId);
+	using namespace std::chrono_literals;
+	auto response = std::format(R"(\pi\\profileid\{}\nick\{}\userid\{}\email\{}\sig\{}\uniquenick\{}\firstname\\lastname\\countrycode\{}\birthday\{}\lon\0.000000\lat\0.000000\loc\\id\{}\final\)",
+		m_PlayerData->GetProfileID(), m_PlayerData->name, m_PlayerData->GetUserID(), m_PlayerData->email, m_LoginTicket, m_PlayerData->name, m_PlayerData->country, utils::to_date(std::chrono::sys_days{ 2014y / 05 / 31 }), requestId);
 	co_await m_Socket.async_send(boost::asio::buffer(response), boost::asio::use_awaitable);
 }

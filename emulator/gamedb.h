@@ -31,6 +31,7 @@ namespace gamespy {
 		nlohmann::json m_Config;
 
 	public:
+		GameDBInMemory(boost::asio::io_context& context);
 		GameDBInMemory(boost::asio::io_context& context, nlohmann::json config);
 		~GameDBInMemory();
 

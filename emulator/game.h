@@ -4,12 +4,12 @@
 
 #include "asio.h"
 #include "task.h"
+#include "utils.h"
 #include "sqlite.h"
 #include <cstdint>
 #include <string>
 #include <string_view>
 #include <vector>
-#include <chrono>
 
 namespace gamespy {
 	struct GameData
@@ -19,15 +19,13 @@ namespace gamespy {
 			std::string name;
 			enum class Send : std::uint8_t
 			{
-				no_send,
-				as_string,
+				as_string = 0,
 				as_byte,
 				as_short
 			} send = Send::as_string;
 
 			enum class Store
 			{
-				no_store,
 				as_integer,
 				as_real,
 				as_text
@@ -52,8 +50,6 @@ namespace gamespy {
 		std::vector<GameKey> keys;
 	};
 
-	using Clock = std::chrono::system_clock;
-
 	class Game
 	{
 		sqlite::db m_DB; // stores added servers (in-memory)
@@ -67,9 +63,11 @@ namespace gamespy {
 		std::vector<std::string> m_PopularValues;
 
 	public:
+		using KeyType = GameData::GameKey;
+
 		template<typename StringType>
 		struct ServerData {
-			std::chrono::time_point<Clock> last_update;
+			Clock::time_point last_update;
 			StringType public_ip;
 			std::uint16_t public_port;
 			StringType private_ip;
@@ -107,7 +105,8 @@ namespace gamespy {
 		auto keys() const -> const decltype(m_Data.keys)& { return m_Data.keys; }
 
 		static bool IsValidParamName(const std::string_view& paramName);
-		GameData::GameKey::Send GetParamType(const std::string_view& keyName) const;
+		KeyType::Send GetParamSendType(const std::string_view& keyName) const;
+		KeyType::Store GetParamStoreType(const std::string_view& keyName) const;
 	};
 }
 

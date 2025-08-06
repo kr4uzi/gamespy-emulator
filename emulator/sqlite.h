@@ -149,6 +149,9 @@ namespace sqlite
 
 		}
 
+		std::size_t columns();
+		std::string_view column_name(std::size_t pos);
+
 		template<std::size_t I = 0, typename T, typename... R>
 		inline void bind(T t, R... r)
 		{
@@ -193,7 +196,8 @@ namespace sqlite
 		template<typename S>
 		S column_at(std::size_t pos) requires std::ranges::contiguous_range<S>
 		{
-			return S{ column_at<const char*>(pos) };
+			auto str = column_at<const char*>(pos);
+			return S{ str ? str : "" };
 		}
 
 		template<typename T>

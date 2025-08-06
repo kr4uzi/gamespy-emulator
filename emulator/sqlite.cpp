@@ -124,6 +124,16 @@ void sqlite::stmt::finalize(void* stmt)
 	}
 }
 
+std::size_t sqlite::stmt::columns()
+{
+	return static_cast<std::uint32_t>(sqlite3_column_count(reinterpret_cast<sqlite3_stmt*>(m_Stmt.get())));
+}
+
+std::string_view sqlite::stmt::column_name(std::size_t pos)
+{
+	return sqlite3_column_name(reinterpret_cast<sqlite3_stmt*>(m_Stmt.get()), pos);
+}
+
 sqlite::stmt::stmt_ptr_t sqlite::stmt::prepare(void* _db, const std::string_view& sql)
 {
 	if (sql.length() > std::numeric_limits<int>::max())
