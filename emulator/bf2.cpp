@@ -106,13 +106,13 @@ const auto bf2Data = GameData{
 };
 
 BF2::BF2(boost::asio::io_context& context)
-	: Game{ bf2Data }, m_SSL{ boost::asio::ssl::context::tls_client }, m_Conn{ context, m_SSL }
+	: Game{ bf2Data }, m_Conn{ context }
 {
 
 }
 
 BF2::BF2(boost::asio::io_context& context, ConnectionParams params)
-	: Game{ bf2Data }, m_SSL{ boost::asio::ssl::context::tls_client }, m_Conn{ context, m_SSL }, m_Params(std::move(params))
+	: Game{ bf2Data }, m_Conn{ context }, m_Params(std::move(params))
 {
 
 }
@@ -131,13 +131,13 @@ task<void> BF2::Connect()
 		co_return;
 	}
 
-	auto resolver = boost::asio::ip::tcp::resolver{ m_Conn.get_executor() };
-	const auto& endpoints = co_await resolver.async_resolve(m_Params->hostname, std::to_string(m_Params->port), boost::asio::use_awaitable);
-
-	auto handshakeParams = boost::mysql::handshake_params{ m_Params->username, m_Params->password, m_Params->database };
-	handshakeParams.set_ssl(boost::mysql::ssl_mode::enable);
+	auto params=boost::mysql::connect_params{};
+    	params.server_address.emplace_host_and_port(m_Params->hostname, m_Params->port);
+    	params.username=m_Params->username;
+    	params.password=m_Params->password;
+    	params.database=m_Params->database;
 	std::println("[bf2] connecting to {}:{} db={}", m_Params->hostname, m_Params->port, m_Params->database);
-	co_await m_Conn.async_connect(*endpoints, handshakeParams, boost::asio::use_awaitable);
+	co_await m_Conn.async_connect(params);
 }
 
 task<void> BF2::Disconnect()

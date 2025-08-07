@@ -1,15 +1,19 @@
 #include "gpcm.client.h"
 #include "utils.h"
 #include <boost/crc.hpp>
-#include <GameSpy/GP/gpi.h>
-#include <GameSpy/GP/gpiOperation.h>
 #include <format>
 #include <print>
+#include <chrono>
 using namespace gamespy;
 using namespace std::string_literals;
 
+namespace {
+	constexpr std::size_t gamespy_server_challenge_length = 128;
+	constexpr std::size_t gamespy_login_ticket_length = 25;
+}
+
 LoginClient::LoginClient(boost::asio::ip::tcp::socket socket, PlayerDB& playerDB)
-	: m_Socket(std::move(socket)), m_HeartBeatTimer(m_Socket.get_executor()), m_PlayerDB(playerDB)
+	: m_Socket(std::move(socket)), m_HeartbeatTimer(m_Socket.get_executor()), m_PlayerDB(playerDB)
 {
 
 }
@@ -21,10 +25,10 @@ LoginClient::~LoginClient()
 
 boost::asio::awaitable<void> LoginClient::KeepAliveClient()
 {
-	m_HeartBeatTimer = boost::asio::deadline_timer(co_await boost::asio::this_coro::executor);
+	m_HeartbeatTimer = boost::asio::steady_timer(co_await boost::asio::this_coro::executor);
 	while (true) {
-		m_HeartBeatTimer.expires_from_now(boost::posix_time::seconds(60));
-		auto [error] = co_await m_HeartBeatTimer.async_wait(boost::asio::as_tuple(boost::asio::use_awaitable));
+		m_HeartbeatTimer.expires_after(std::chrono::seconds(60));
+		auto [error] = co_await m_HeartbeatTimer.async_wait(boost::asio::as_tuple(boost::asio::use_awaitable));
 		if (error) {
 			std::println("{}", error.what());
 			break;
@@ -39,8 +43,8 @@ boost::asio::awaitable<void> LoginClient::KeepAliveClient()
 
 boost::asio::awaitable<void> LoginClient::SendChallenge()
 {
-	m_ServerChallenge = utils::random_string("ABCDEFGHIJKLMNOPQRSTUVWXYZ", sizeof(GPIConnectData::serverChallenge) - 1);
-	m_LoginTicket = utils::random_string("0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ][", sizeof(GPIConnection::loginTicket) - 3) + "__";
+	m_ServerChallenge = utils::random_string("ABCDEFGHIJKLMNOPQRSTUVWXYZ", ::gamespy_server_challenge_length - 1);
+	m_LoginTicket = utils::random_string("0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ][", ::gamespy_login_ticket_length - 3) + "__";
 
 	auto response = std::format(R"(\lc\1\challenge\{}\id\1\final\)", m_ServerChallenge);
 	co_await m_Socket.async_send(boost::asio::buffer(response), boost::asio::use_awaitable);
@@ -254,3 +258,16 @@ boost::asio::awaitable<void> LoginClient::SendPlayerData(std::uint32_t requestId
 		m_PlayerData->GetProfileID(), m_PlayerData->name, m_PlayerData->GetUserID(), m_PlayerData->email, m_LoginTicket, m_PlayerData->name, m_PlayerData->country, utils::to_date(std::chrono::sys_days{ 2014y / 05 / 31 }), requestId);
 	co_await m_Socket.async_send(boost::asio::buffer(response), boost::asio::use_awaitable);
 }
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-function"
+namespace {
+#ifdef _HASHTABLE_H
+#  undef _HASHTABLE_H
+#endif
+#include <GameSpy/GP/gpi.h>
+#include <GameSpy/GP/gpiOperation.h>
+	static_assert(sizeof(GPIConnectData::serverChallenge) == ::gamespy_server_challenge_length, "serverChallenge length missmatch");
+	static_assert(GP_LOGIN_TICKET_LEN == gamespy_login_ticket_length, "GP_LOGIN_TICKET_LEN missmatch");
+}
+#pragma GCC diagnostic pop

@@ -9,7 +9,7 @@
 namespace gamespy {
 	class LoginClient {
 		boost::asio::ip::tcp::socket m_Socket;
-		boost::asio::deadline_timer m_HeartBeatTimer;
+		boost::asio::steady_timer m_HeartbeatTimer;
 
 		PlayerDB& m_PlayerDB;
 		std::optional<PlayerData> m_PlayerData;

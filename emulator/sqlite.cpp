@@ -226,8 +226,8 @@ void sqlite::stmt::bind_at(std::size_t pos, std::int64_t val)
 		throw std::runtime_error{ "Failed to bind int" };
 }
 
-template<>
-const char* sqlite::stmt::column_at(std::size_t pos)
+
+const char* sqlite::stmt::column_text(std::size_t pos)
 {
 	if (pos > std::numeric_limits<int>::max())
 		throw std::overflow_error{ "column_at pos out of range" };
@@ -237,42 +237,25 @@ const char* sqlite::stmt::column_at(std::size_t pos)
 	return reinterpret_cast<const char*>(text);
 }
 
-template<>
-std::int32_t sqlite::stmt::column_at(std::size_t pos)
+std::uint32_t sqlite::stmt::colum_int(std::size_t pos)
 {
 	if (pos > std::numeric_limits<int>::max())
 		throw std::overflow_error{ "column_at pos out of range" };
-
+		
 	auto stmt = reinterpret_cast<sqlite3_stmt*>(m_Stmt.get());
 	return sqlite3_column_int(stmt, static_cast<int>(pos));
 }
 
-template<>
-std::int64_t sqlite::stmt::column_at(std::size_t pos)
+std::uint64_t sqlite::stmt::colum_int64(std::size_t pos)
 {
 	if (pos > std::numeric_limits<int>::max())
 		throw std::overflow_error{ "column_at pos out of range" };
-
+		
 	auto stmt = reinterpret_cast<sqlite3_stmt*>(m_Stmt.get());
 	return sqlite3_column_int64(stmt, static_cast<int>(pos));
 }
-/*
-template<>
-std::uint32_t sqlite::stmt::colum_at(std::size_t pos)
-{
-	auto stmt = reinterpret_cast<sqlite3_stmt*>(m_Stmt.get());
-	return sqlite3_column_int(stmt, static_cast<int>(pos));
-}
 
-template<>
-std::uint64_t sqlite::stmt::colum_at(std::size_t pos)
-{
-	auto stmt = reinterpret_cast<sqlite3_stmt*>(m_Stmt.get());
-	return sqlite3_column_int64(stmt, static_cast<int>(pos));
-}*/
-
-template<>
-double sqlite::stmt::column_at(std::size_t pos)
+double sqlite::stmt::column_double(std::size_t pos)
 {
 	if (pos > std::numeric_limits<int>::max())
 		throw std::overflow_error{ "column_at pos out of range" };

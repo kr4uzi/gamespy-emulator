@@ -261,7 +261,10 @@ task<void> Game::RemoveServers(const std::vector<std::pair<std::string_view, std
 
 namespace {
 	// verify the gamespy invariants at the bottom of the file so it doesn't pollute the rest of the file
-#include <GameSpy/serverbrowsing/sb_internal.h>
+#ifdef _HASHTABLE_H
+#  undef _HASHTABLE_H
+#endif
+	#include <GameSpy/serverbrowsing/sb_internal.h>
 	static_assert(::gamespy_num_master_servers == NUM_MASTER_SERVERS, "NUM_MASTER_SERVERS value missmatch");
 	static_assert(::gamespy_max_registered_keys == MAX_REGISTERED_KEYS, "MAX_REGISTERED_KEYS value missmatch");
 }

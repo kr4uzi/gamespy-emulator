@@ -22,8 +22,7 @@ namespace gamespy
 		};
 
 	private:
-		boost::asio::ssl::context m_SSL;
-		boost::mysql::tcp_ssl_connection m_Conn;
+		boost::mysql::any_connection m_Conn;
 		std::optional<ConnectionParams> m_Params;
 
 	public:

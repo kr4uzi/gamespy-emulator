@@ -190,51 +190,22 @@ namespace sqlite
 		template<typename T>
 		T column_at(std::size_t pos)
 		{
-
+			if constexpr (std::is_same_v<T, std::string> || std::is_same_v<T, std::string_view>) {
+				auto str = column_text(pos);
+				return T{ str ? str : "" };
+			}
+			else if constexpr (std::is_integral_v<T> && sizeof(T) <= sizeof(int))
+				return column_int(pos);
+			else if constexpr (std::is_integral_v<T> && sizeof(T) > sizeof(int))
+				return column_int64(pos);
+			else if constexpr (std::is_floating_point_v<T>)
+				return column_double(pos);
 		}
 
-		template<typename S>
-		S column_at(std::size_t pos) requires std::ranges::contiguous_range<S>
-		{
-			auto str = column_at<const char*>(pos);
-			return S{ str ? str : "" };
-		}
-
-		template<typename T>
-		std::enable_if_t<(sizeof(T) > sizeof(int)) && !std::is_same_v<T, std::int64_t>, T> column_at(std::size_t pos) requires std::integral<T>
-		{
-			return static_cast<T>(column_at<std::int64_t>(pos));
-		}
-
-		template<typename T>
-		std::enable_if_t<(sizeof(T) <= sizeof(int)) && !std::is_same_v<T, std::int32_t>, T> column_at(std::size_t pos) requires std::integral<T>
-		{
-			return static_cast<T>(column_at<std::int32_t>(pos));
-		}
-
-		template<>
-		const char* column_at(std::size_t pos);
-
-		template<>
-		std::int32_t column_at(std::size_t pos);
-
-		template<>
-		std::int64_t column_at(std::size_t pos);
-
-		template<typename T>
-		std::enable_if_t<!std::is_same_v<T, double>, T> column_at(std::size_t pos) requires std::floating_point<T>
-		{
-			return static_cast<T>(column_at<double>(pos));
-		}
-
-		template<>
-		double column_at(std::size_t pos);
-
-		/*template<>
-		std::uint32_t column_at(std::size_t pos);
-
-		template<>
-		std::uint64_t column_at(std::size_t pos);*/
+		const char* column_text(std::size_t pos);
+		std::int32_t column_int(std::size_t pos);
+		std::int64_t column_int64(std::size_t pos);
+		double column_double(std::size_t pos);
 
 	private:
 		template<typename... T, std::size_t... I>
@@ -244,4 +215,5 @@ namespace sqlite
 		}
 	};
 }
-#endif _GAMESPY_SQLITE_H_
+
+#endif
