@@ -259,9 +259,11 @@ boost::asio::awaitable<void> LoginClient::SendPlayerData(std::uint32_t requestId
 	co_await m_Socket.async_send(boost::asio::buffer(response), boost::asio::use_awaitable);
 }
 
+namespace {
+#ifdef __GNUC__
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-function"
-namespace {
+#endif
 #ifdef _HASHTABLE_H
 #  undef _HASHTABLE_H
 #endif
@@ -270,4 +272,6 @@ namespace {
 	static_assert(sizeof(GPIConnectData::serverChallenge) == ::gamespy_server_challenge_length, "serverChallenge length missmatch");
 	static_assert(GP_LOGIN_TICKET_LEN == gamespy_login_ticket_length, "GP_LOGIN_TICKET_LEN missmatch");
 }
+#ifdef __GNUC__
 #pragma GCC diagnostic pop
+#endif

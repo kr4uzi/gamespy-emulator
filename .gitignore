@@ -366,3 +366,5 @@ vcpkg_installed
 .vscode/
 
 emulator/players.sqlite3
+emulator/emulator
+

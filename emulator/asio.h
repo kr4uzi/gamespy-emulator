@@ -14,4 +14,4 @@
 
 #include <boost/asio.hpp>
 
-#endif // _GAMESPY_EMULATOR_ASIO_H_
+#endif

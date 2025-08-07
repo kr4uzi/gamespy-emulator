@@ -5,6 +5,7 @@ using Send = GameData::GameKey::Send;
 using Store = GameData::GameKey::Store;
 
 namespace key {
+	// changed to be string only as there are still some (e.g. bot) values which are not properly shown in the client
 	constexpr Game::KeyType text(const char* name)
 	{
 		return {
@@ -19,12 +20,22 @@ namespace key {
 		return {
 			.name = name,
 			.send = Send::as_string,
+			.store = Store::as_text
+		};
+		return {
+			.name = name,
+			.send = Send::as_string,
 			.store = Store::as_real
 		};
 	}
 
 	constexpr Game::KeyType shrt(const char* name)
 	{
+		return {
+			.name = name,
+			.send = Send::as_string,
+			.store = Store::as_text
+		};
 		return {
 			.name = name,
 			.send = Send::as_short,
@@ -34,6 +45,11 @@ namespace key {
 
 	constexpr Game::KeyType byte(const char* name)
 	{
+		return {
+			.name = name,
+			.send = Send::as_string,
+			.store = Store::as_text
+		};
 		return {
 			.name = name,
 			.send = Send::as_byte,

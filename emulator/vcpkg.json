@@ -1,11 +1,11 @@
 {
-    "dependencies": [
-        "boost-asio",
-        "boost-crc",
-        "boost-serialization",
-        "boost-mysql",
-        "nlohmann-json",
-        "openssl",
-        "sqlite3"
-    ]
+  "dependencies": [
+    "boost-asio",
+    "boost-crc",
+    "boost-serialization",
+    "boost-mysql",
+    "nlohmann-json",
+    "openssl",
+    "sqlite3"
+  ]
 }
