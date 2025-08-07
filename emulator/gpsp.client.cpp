@@ -79,13 +79,12 @@ boost::asio::awaitable<void> SearchClient::HandleProfileExists(const std::span<c
 
 boost::asio::awaitable<void> SearchClient::Process()
 {
-	boost::asio::streambuf buff;
+	auto buffer = std::string{};
 	while (m_Socket.is_open()) {
-		auto [error, length] = co_await boost::asio::async_read_until(m_Socket, buff, "\\final\\", boost::asio::as_tuple(boost::asio::use_awaitable));
+		auto [error, length] = co_await boost::asio::async_read_until(m_Socket, boost::asio::dynamic_buffer(buffer), "\\final\\", boost::asio::as_tuple(boost::asio::use_awaitable));
 		if (error) break;
 
-		auto packet = std::span<const char>{ boost::asio::buffer_cast<const char*>(buff.data()), buff.size() };
-		auto textPacket = std::string_view{ packet.begin(), packet.end() };
+		auto packet = std::span{ buffer.data(), length };
 		// all requests (gpiSearch.c):
 		// search (sesskey, profileid, namespaceid, partnerid, nick?, uniquenick?, email?, firstname?, lastname?, icquin?, skip?, gamename)
 		// searchunique (sesskey, profileid, uniquenick, namespaces[,separated], gamename)
@@ -99,16 +98,16 @@ boost::asio::awaitable<void> SearchClient::Process()
 		// uniquesearch (preferrednick, namespaceid, gamename)
 
 		// requests used by bf2:
-		if (textPacket.starts_with("\\nicks\\"))
+		if (buffer.starts_with("\\nicks\\"))
 			co_await HandleSearchNicks(packet);
-		else if (textPacket.starts_with("\\check\\"))
+		else if (buffer.starts_with("\\check\\"))
 			co_await HandleProfileExists(packet);
 		else {
-			std::println("[search] unhandled packet: {}", textPacket);
+			std::println("[search] unhandled packet: {}", buffer);
 			co_await SendError(0, "Invalid Query!");
 		}
 
-		buff.consume(packet.size());
+		buffer.erase(0, length);
 	}
 }
 

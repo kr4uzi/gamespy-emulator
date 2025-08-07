@@ -3,7 +3,7 @@
 using namespace gamespy;
 
 PlayerDBMySQL::PlayerDBMySQL(boost::asio::io_context& context, ConnectionParams params)
-	: m_SSL{ boost::asio::ssl::context::tls_client }, m_Conn{ context, m_SSL }, m_Params{ std::move(params) }
+	: m_Conn{ context }, m_Params{ std::move(params) }
 {
 
 }
@@ -15,13 +15,13 @@ PlayerDBMySQL::~PlayerDBMySQL()
 
 task<void> PlayerDBMySQL::Connect()
 {
-	auto resolver = boost::asio::ip::tcp::resolver{ m_Conn.get_executor() };
-	const auto& endpoints = co_await resolver.async_resolve(m_Params.hostname, std::to_string(m_Params.port), boost::asio::use_awaitable);
-	
-	auto handshakeParams = boost::mysql::handshake_params{ m_Params.username, m_Params.password, m_Params.database };
-	handshakeParams.set_ssl(boost::mysql::ssl_mode::enable);
+	auto params = boost::mysql::connect_params{};
+	params.server_address.emplace_host_and_port(m_Params.hostname, m_Params.port);
+	params.username = m_Params.username;
+	params.password = m_Params.password;
+	params.database = m_Params.database;
 	std::println("[playerdb] connecting to {}:{} db={}", m_Params.hostname, m_Params.port, m_Params.database);
-	co_await m_Conn.async_connect(*endpoints, handshakeParams, boost::asio::use_awaitable);
+	co_await m_Conn.async_connect(params);
 }
 
 task<void> PlayerDBMySQL::Disconnect()

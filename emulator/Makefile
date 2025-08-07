@@ -9,7 +9,7 @@ CXX = g++
 CXXFLAGS = -std=c++26 -O3 -Wall
 DFLAGS = -D_UNIX
 IFLAGS = -I../dependencies/boost -I../dependencies/boost-mysql/include -I../dependencies/GameSpy/src -I../dependencies/nlohmann-json/single_include
-LFLAGS = -L../dependencies/boost/stage/lib -lboost_serialization
+LFLAGS = -L../dependencies/boost/stage/lib -lboost_serialization -lboost_charconv -lsqlite3 -lssl -lcrypto -lquadmath
 
 SRC_FILES = $(wildcard ./*.cpp)
 OBJ_FILES = $(SRC_FILES:./%.cpp=obj/%.o)
@@ -26,7 +26,7 @@ all: $(TARGET)
 # Build the target executable
 $(TARGET): $(OBJ_FILES)
 	@echo "Linking..."
-	$(CXX) $(OBJ_FILES) -o $@ $(LFLAGS)
+	$(CXX) $(OBJ_FILES) -static -o $@ $(LFLAGS)
 
 # Compile the source files into object files
 obj/%.o: ./%.cpp

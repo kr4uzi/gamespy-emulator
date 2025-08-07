@@ -237,7 +237,7 @@ const char* sqlite::stmt::column_text(std::size_t pos)
 	return reinterpret_cast<const char*>(text);
 }
 
-std::uint32_t sqlite::stmt::colum_int(std::size_t pos)
+std::int32_t sqlite::stmt::column_int(std::size_t pos)
 {
 	if (pos > std::numeric_limits<int>::max())
 		throw std::overflow_error{ "column_at pos out of range" };
@@ -246,7 +246,7 @@ std::uint32_t sqlite::stmt::colum_int(std::size_t pos)
 	return sqlite3_column_int(stmt, static_cast<int>(pos));
 }
 
-std::uint64_t sqlite::stmt::colum_int64(std::size_t pos)
+std::int64_t sqlite::stmt::column_int64(std::size_t pos)
 {
 	if (pos > std::numeric_limits<int>::max())
 		throw std::overflow_error{ "column_at pos out of range" };

@@ -14,6 +14,7 @@ namespace {
 	constexpr std::size_t server_challenge_length = 25;
 	static_assert(crypt_key_length <= std::numeric_limits<std::uint8_t>::max(), "crypt_key_length must fit in a unsigned char");
 	static_assert(server_challenge_length <= std::numeric_limits<std::uint8_t>::max(), "server_challenge_length must fit in a unsigned char");
+	constexpr std::size_t gs_recv_buffer_size = 40096;
 
 	enum ServerOptions : std::uint8_t {
 		unsolicited_udp           = 1,
@@ -82,34 +83,36 @@ boost::asio::awaitable<void> BrowserClient::StartEncryption(const std::string_vi
 
 boost::asio::awaitable<void> BrowserClient::Process()
 {
-	auto endpoint = m_Socket.local_endpoint();
-	auto buffer = boost::asio::streambuf{};
-	auto mutableBuffer = buffer.prepare(1024);
-
+	auto buffer = std::vector<std::uint8_t>(::gs_recv_buffer_size);
+	auto available = std::size_t{ 0 };
 	while (m_Socket.is_open()) {
-		const auto& [error, length] = co_await m_Socket.async_read_some(mutableBuffer, boost::asio::as_tuple(boost::asio::use_awaitable));
+		const auto& [error, length] = co_await m_Socket.async_read_some(boost::asio::buffer(buffer.data() + available, buffer.size() - available), boost::asio::as_tuple(boost::asio::use_awaitable));
 		if (error)
 			break;
 
-		buffer.commit(length);
-		if (buffer.size() < 3) {
-			continue;
+		available += length;
+		auto offset = std::size_t{ 0 };
+		while (available - offset >= 3) {
+			auto packetLength = (std::size_t(buffer[offset]) << 8) | std::size_t(buffer[offset + 1]);
+			if (packetLength > available - offset)
+				break; // full packet was not yet received
+
+			auto packet = std::span(buffer.data() + offset, packetLength);
+			switch (static_cast<RequestType>(packet[2])) {
+			case RequestType::server_list_request:
+				co_await HandleServerListRequest(packet.subspan(3));
+				break;
+			default:
+				std::println("[browser] received unknown packet {:2X}", packet[2]);
+			}
+
+			offset += packetLength;
 		}
-
-		auto packet = std::span<const std::uint8_t>{ boost::asio::buffer_cast<const std::uint8_t*>(buffer.data()), buffer.size() };
-		std::uint16_t packetLength = (static_cast<std::uint16_t>(packet[0]) << 8) | static_cast<std::uint16_t>(packet[1]);
-		if (packetLength < buffer.size())
-			continue; // full packet was not yet received
-
-		switch (static_cast<RequestType>(packet[2])) {
-		case RequestType::server_list_request:
-			co_await HandleServerListRequest(packet.subspan(3));
-			break;
-		default:
-			std::println("[browser] received unknown packet {:2X}", packet[2]);
+		
+		if (offset) {
+			std::memmove(buffer.data(), buffer.data() + offset, available - offset);
+			available -= offset;
 		}
-
-		buffer.consume(packetLength);
 	}
 }
 
@@ -155,12 +158,7 @@ boost::asio::awaitable<void> BrowserClient::HandleServerListRequest(const std::s
 	co_await m_Socket.async_send(boost::asio::buffer(serverData), boost::asio::use_awaitable);
 	serverData.clear();
 	
-	// Note: Server Data must be sent in one go because unfortunately there is a bug in the standard
-	// gamespy implementation:
-	// ServerBrowserThink > SBListThink > ProcessIncomingData > CanReceiveOnSocket will not return true
-	// ever again and this way the client will never actually parse the "last server marker" and 
-	// therefore never perform a cleanup
-	// Update 01/2025: It seems that at least BF2 can handle this scenario
+	// does this need to be split if it is greater than the recv buffer size?
 	serverData.append_range(std::array{ 0x00, 0xFF, 0xFF, 0xFF, 0xFF });
 	m_Cypher->encrypt(serverData);
 	co_await m_Socket.async_send(boost::asio::buffer(serverData), boost::asio::use_awaitable);
@@ -403,6 +401,9 @@ std::expected<ServerListRequest, ServerListRequest::ParseError> ServerListReques
 }
 
 namespace {
+#ifdef _HASHTABLE_H
+#  undef _HASHTABLE_H
+#endif
 #include <GameSpy/serverbrowsing/sb_internal.h>
 	static_assert(::list_protocol_version == LIST_PROTOCOL_VERSION, "LIST_PROTOCOL_VERSION value missmatch");
 	static_assert(::list_encoding_version == LIST_ENCODING_VERSION, "LIST_ENCODING_VERSION value missmatch");
@@ -423,11 +424,9 @@ namespace {
 
 	// check Backend Options bounds
 	static_assert(std::to_underlying(GameData::BackendOptions::qr2_use_query_challenge) == QR2_USE_QUERY_CHALLENGE, "QR2_USE_QUERY_CHALLENGE value missmatch");
-}
 
-namespace {
-#include <GameSpy/serverbrowsing/sb_internal.h>
 	static_assert(KEYTYPE_STRING == std::to_underlying(Game::KeyType::Send::as_string), "KEYTYPE_STRING missmatch");
 	static_assert(KEYTYPE_BYTE == std::to_underlying(Game::KeyType::Send::as_byte), "KEYTYPE_BYTE missmatch");
 	static_assert(KEYTYPE_SHORT == std::to_underlying(Game::KeyType::Send::as_short), "KEYTYPE_SHORT missmatch");
+	
 }

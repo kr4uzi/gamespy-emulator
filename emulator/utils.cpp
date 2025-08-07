@@ -25,21 +25,6 @@ namespace {
 		return T{ seed_seq };
 	}
 
-	std::vector<std::string> SplitString(const std::string& string_, char token_)
-	{
-		std::vector<std::string> tempValues;
-
-		std::stringstream ss(string_);
-		std::string currentItem;
-
-		while (std::getline(ss, currentItem, token_)) {
-			if (!currentItem.empty())
-				tempValues.push_back(currentItem);
-		}
-
-		return tempValues;
-	}
-
 	//http://stackoverflow.com/a/28471421
 	std::string base64_decode(const std::string& data) {
 		using namespace boost::archive::iterators;
@@ -133,7 +118,8 @@ std::string utils::generate_challenge(const std::string_view& name, const std::s
 
 std::string utils::md5(const std::string_view& text)
 {
-	const ::md5 hash(text.begin(), text.end());
+	//const ::md5 hash(text.begin(), text.end());
+	const ::md5 hash(std::begin(text), std::end(text));
 	return hash.hex_digest<std::string>();
 }
 
@@ -198,9 +184,9 @@ std::uint32_t utils::to_date(const Clock::time_point& timepoint)
 Clock::time_point utils::from_date(std::uint32_t gsDate)
 {
 	auto ymd = std::chrono::year_month_day{
-		std::chrono::year { (gsDate &     0xFFFF) },
-		std::chrono::month{ (gsDate &   0xFF0000) >> 16 },
-		std::chrono::day  { (gsDate & 0xFF000000) >> 24 }
+		std::chrono::year { int(gsDate &     0xFFFF)       },
+		std::chrono::month{    (gsDate &   0xFF0000) >> 16 },
+		std::chrono::day  {    (gsDate & 0xFF000000) >> 24 }
 	};
 
 	return std::chrono::sys_days{ ymd };

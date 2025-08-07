@@ -10,6 +10,7 @@ using namespace std::string_literals;
 namespace {
 	constexpr std::size_t gamespy_server_challenge_length = 128;
 	constexpr std::size_t gamespy_login_ticket_length = 25;
+	constexpr std::size_t gamespy_recv_buffer_size = 2048;
 }
 
 LoginClient::LoginClient(boost::asio::ip::tcp::socket socket, PlayerDB& playerDB)
@@ -201,13 +202,12 @@ boost::asio::awaitable<void> LoginClient::Process()
 {
 	co_await SendChallenge();
 
-	boost::asio::streambuf buff;
+	auto buffer = std::string{};
 	while (m_Socket.is_open()) {
-		auto [error, length] = co_await boost::asio::async_read_until(m_Socket, buff, "\\final\\", boost::asio::as_tuple(boost::asio::use_awaitable));
+		auto [error, length] = co_await boost::asio::async_read_until(m_Socket, boost::asio::dynamic_buffer(buffer), "\\final\\", boost::asio::as_tuple(boost::asio::use_awaitable));
 		if (error) break;
 
-		auto packet = std::span<const char>{ boost::asio::buffer_cast<const char*>(buff.data()), buff.size() };
-		auto textPacket = std::string_view{ packet.begin(), packet.end() };
+		auto packet = std::span{ buffer.data(), length };
 		// all requests (gpiConnect.c):
 		// login (challenge, authtoken?, uniquenick|user[nick@email]), userid?, profileid?, partnerid, response, firewall=1?, port, productid, gamename, namespaceid, sdkrevision, quiet, id=1) 
 		// newuser (email, nick, passwordenc, productid, gamename, namespaceid, uniquenick, cdkeyenc?, partnerid, id=1)*
@@ -217,22 +217,22 @@ boost::asio::awaitable<void> LoginClient::Process()
 		// logout (sesskey)
 		// * TODO: check if cdkey or cdkeyenc or both are sent (newer gamespy clients only send cdkeyenc)
 
-		if (textPacket.starts_with("\\login\\"))
+		if (buffer.starts_with("\\login\\"))
 			co_await HandleLogin(packet);
-		else if (textPacket.starts_with("\\newuser\\"))
+		else if (buffer.starts_with("\\newuser\\"))
 			co_await HandleNewUser(packet);
-		else if (textPacket.starts_with("\\getprofile\\"))
+		else if (buffer.starts_with("\\getprofile\\"))
 			co_await HandleGetProfile(packet);
-		else if (textPacket.starts_with("\\updatepro\\"))
+		else if (buffer.starts_with("\\updatepro\\"))
 			co_await HandleUpdateProfile(packet);
-		else if (textPacket.starts_with("\\logout\\"))
+		else if (buffer.starts_with("\\logout\\"))
 			co_await HandleLogout(packet);
 		else {
-			std::println("[login] unhandled packet: {}", textPacket);
+			std::println("[login] unhandled packet: {}", buffer);
 			co_await SendError(0, 0, "Invalid Query!");
 		}
 
-		buff.consume(packet.size());
+		buffer.erase(0, length);
 	}
 
 	if (m_PlayerData) {

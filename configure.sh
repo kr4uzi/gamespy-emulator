@@ -1,5 +1,5 @@
 sudo apt-get install build-essential g++ libsqlite3-dev libboost-all-dev libssl-dev
-it submodule update --init --recursive --depth 1
+git submodule update --init --recursive --depth 1
 
 # build gcc:
 # sudo apt install libmpfr-dev libgmp3-dev libmpc-dev -y
@@ -18,5 +18,8 @@ cd dependencies/boost
 #    libs/compat \
 #    libs/asio libs/mysql libs/crc libs/serialization
 
-./bootstrap.sh
-./b2 --with-serialization
+if [ ! -x ./b2 ]; then
+    ./bootstrap.sh
+fi
+
+./b2 runtime-link=static threading=multi link=static --with-serialization --with-charconv

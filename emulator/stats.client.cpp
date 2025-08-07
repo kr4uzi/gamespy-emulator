@@ -50,18 +50,15 @@ StatsClient::~StatsClient()
 
 boost::asio::awaitable<std::span<char>> StatsClient::ReceivePacket()
 {
+	m_RecvBuffer.erase(0, m_LastPacketSize);
 	auto packetEnd = std::string_view{"\\final\\"};
-	auto bufferPtr = m_RecvBuffer.prepare(1400);
-	auto [error, length] = co_await boost::asio::async_read_until(m_Socket, m_RecvBuffer, packetEnd, boost::asio::as_tuple(boost::asio::use_awaitable));
+	const auto& [error, length] = co_await boost::asio::async_read_until(m_Socket, boost::asio::dynamic_buffer(m_RecvBuffer), packetEnd, boost::asio::as_tuple(boost::asio::use_awaitable));
 	if (error) co_return std::span<char>{};
 
-	auto packet = boost::asio::buffer_cast<char*>(bufferPtr);
-
-	auto encoded = std::span<char>{ packet, length - packetEnd.length() };
+	auto encoded = std::span(m_RecvBuffer.data(), length - packetEnd.size());
 	utils::gs_xor(encoded, utils::xor_types::GameSpy3D);
-
-	m_RecvBuffer.consume(length);
-	co_return encoded;
+	m_LastPacketSize = length;
+	co_return std::span(m_RecvBuffer.data(), length);
 }
 
 boost::asio::awaitable<void> StatsClient::SendPacket(std::string message)

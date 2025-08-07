@@ -2,7 +2,6 @@
 #include "asio.h"
 #include <cstdint>
 #include <string>
-#include <string_view>
 #include <span>
 
 namespace gamespy {
@@ -12,10 +11,11 @@ namespace gamespy {
 
 	class StatsClient {
 		boost::asio::ip::tcp::socket m_Socket;
-		boost::asio::streambuf m_RecvBuffer;
+		std::string m_RecvBuffer;
+		std::string::size_type m_LastPacketSize = 0;
 
-		PlayerDB& m_PlayerDB;
 		GameDB& m_GameDB;
+		PlayerDB& m_PlayerDB;
 		std::string m_ServerChallenge;
 		std::int32_t m_SessionKey;
 

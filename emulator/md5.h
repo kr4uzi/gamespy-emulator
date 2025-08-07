@@ -99,7 +99,7 @@ private:
 
 public:
     template<class InputIterator>
-    typename std::enable_if<std::numeric_limits<typename InputIterator::value_type>::digits <= 8>::type
+    typename std::enable_if<std::numeric_limits<typename std::iterator_traits<InputIterator>::value_type>::digits <= 8>::type
         update(InputIterator first, InputIterator last) {
 
         std::uint64_t original_length_bits = std::distance(first, last) * 8;

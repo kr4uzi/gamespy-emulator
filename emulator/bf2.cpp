@@ -131,11 +131,11 @@ task<void> BF2::Connect()
 		co_return;
 	}
 
-	auto params=boost::mysql::connect_params{};
-    	params.server_address.emplace_host_and_port(m_Params->hostname, m_Params->port);
-    	params.username=m_Params->username;
-    	params.password=m_Params->password;
-    	params.database=m_Params->database;
+	auto params = boost::mysql::connect_params{};
+	params.server_address.emplace_host_and_port(m_Params->hostname, m_Params->port);
+	params.username = m_Params->username;
+	params.password = m_Params->password;
+	params.database = m_Params->database;
 	std::println("[bf2] connecting to {}:{} db={}", m_Params->hostname, m_Params->port, m_Params->database);
 	co_await m_Conn.async_connect(params);
 }
