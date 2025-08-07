@@ -1,6 +1,12 @@
-[submodule "dependencies/GameSpy"]
-	path = dependencies/GameSpy
-	url = https://github.com/kr4uzi/GameSpy.git
 [submodule "dependencies/detours"]
 	path = dependencies/detours
 	url = https://github.com/microsoft/Detours.git
+[submodule "dependencies/GameSpy"]
+	path = dependencies/GameSpy
+	url = https://github.com/nitrocaster/GameSpy.git
+[submodule "dependencies/nlohmann-json"]
+	path = dependencies/nlohmann-json
+	url = https://github.com/nlohmann/json.git
+[submodule "dependencies/boost"]
+	path = dependencies/boost
+	url = https://github.com/boostorg/boost.git
