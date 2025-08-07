@@ -25,5 +25,23 @@ Battlefield 2:
 - edit and use the start_bf2.bat to make your client connect to a configurable gamespy server
 
 Developing:
-- Linux: ./configure.sh && cd emulator && make
-- Windows: execute the configure.bat, then open the .sln and build the solution using the Visual Studio GUI
+Windows: execute the configure.bat, then open the .sln and build the solution using the Visual Studio GUI
+
+Linux:
+On Linux you probably need to install vcpkg first:
+cd ~/source
+wget https://archives.boost.io/release/1.88.0/source/boost_1_88_0.tar.gz
+tar -xzf boost_1_88_0.tar.gz
+cd boost_1_88_0
+./bootstrap.sh --with-libraries=asio,serialization,crc,charconv,iterator,mysql
+./b2 link=static runtime-link=static
+
+cd ~/source
+git clone https://github.com/nlohmann/json.git --depth 1
+
+cd ~/source/gamespy-emulator
+./configure.sh
+cd emulator
+export CXX=g++
+cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE=~/source/vcpkg/scripts/buildsystems/vcpkg.cmake -DVCPKG_TARGET_TRIPLET=x64-linux-static
+
