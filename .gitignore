@@ -367,4 +367,5 @@ vcpkg_installed
 
 emulator/players.sqlite3
 emulator/emulator
+emulator/emulator.exe
 emulator/build

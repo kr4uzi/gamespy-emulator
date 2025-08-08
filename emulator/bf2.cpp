@@ -5,7 +5,7 @@ using Send = GameData::GameKey::Send;
 using Store = GameData::GameKey::Store;
 
 namespace key {
-	// changed to be string only as there are still some (e.g. bot) values which are not properly shown in the client
+	// bf2 expects all keys as strings
 	constexpr Game::KeyType text(const char* name)
 	{
 		return {
@@ -20,11 +20,6 @@ namespace key {
 		return {
 			.name = name,
 			.send = Send::as_string,
-			.store = Store::as_text
-		};
-		return {
-			.name = name,
-			.send = Send::as_string,
 			.store = Store::as_real
 		};
 	}
@@ -34,11 +29,6 @@ namespace key {
 		return {
 			.name = name,
 			.send = Send::as_string,
-			.store = Store::as_text
-		};
-		return {
-			.name = name,
-			.send = Send::as_short,
 			.store = Store::as_integer
 		};
 	}
@@ -48,11 +38,6 @@ namespace key {
 		return {
 			.name = name,
 			.send = Send::as_string,
-			.store = Store::as_text
-		};
-		return {
-			.name = name,
-			.send = Send::as_byte,
 			.store = Store::as_integer
 		};
 	}

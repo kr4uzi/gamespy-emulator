@@ -1,0 +1,15 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ImportGroup Label="PropertySheets" />
+  <PropertyGroup>
+    <TARGET_DLL_NAME>dbghelp</TARGET_DLL_NAME>
+  </PropertyGroup>
+  <ItemDefinitionGroup>  
+    <Link>
+      <AdditionalDependencies>dbghelp.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+    <ClCompile>
+      <PreprocessorDefinitions>GAMESPY_GAMENAME="battlefield2";$(PreprocessorDefinitions);</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+</Project>
