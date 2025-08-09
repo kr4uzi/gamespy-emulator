@@ -8,11 +8,6 @@ GameSpy Redirector
 - redirect all calls to localhost
 - fix the long startup process
 
-Used libraries / techniques:
-- C++ Coroutines
-- Boost::Asio
-- Microsoft Detours (to inject the redirector into the BF2 process)
-
 Other resources:
 - BF2 Statistics (weapon unlocks)
 - BF2 CD Key Changer: https://github.com/art567/bf2keyman
@@ -28,20 +23,17 @@ Developing:
 Windows: execute the configure.bat, then open the .sln and build the solution using the Visual Studio GUI
 
 Linux:
-On Linux you probably need to install vcpkg first:
-cd ~/source
-wget https://archives.boost.io/release/1.88.0/source/boost_1_88_0.tar.gz
-tar -xzf boost_1_88_0.tar.gz
-cd boost_1_88_0
-./bootstrap.sh --with-libraries=asio,serialization,crc,charconv,iterator,mysql
-./b2 link=static runtime-link=static
+- if you want dependencies to be handled by vcpkg:
+```shell
+git clone https://github.com/microsoft/vcpkg.git
+cd vcpkg
+./vcpkg_bootstrap.sh
+```
 
-cd ~/source
-git clone https://github.com/nlohmann/json.git --depth 1
-
-cd ~/source/gamespy-emulator
+- build the emulator
+```bash
 ./configure.sh
 cd emulator
-export CXX=g++
-cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE=~/source/vcpkg/scripts/buildsystems/vcpkg.cmake -DVCPKG_TARGET_TRIPLET=x64-linux-static
-
+cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE=~/source/vcpkg/scripts/buildsystems/vcpkg.cmake -DCMAKE_CXX_COMPILER=/usr/local/bin/g++
+cmake --build build
+```
