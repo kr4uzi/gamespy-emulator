@@ -8,12 +8,12 @@
 #include <WinSock2.h>
 #include <Windows.h>
 #include <ws2tcpip.h>
-#include <detours/detours.h>
+#include <detours.h>
+#include "exports.h"
 
 //
 // redirect all dns lookup requests to configured (+gamespy launch parameter) or autodetected gamespy emulator
 //
-
 bool g_redirect = false;
 LONG g_detours_error = 0;
 auto gs_gethostbyname = ::gethostbyname;
@@ -131,7 +131,6 @@ BOOL WINAPI DllMain(HINSTANCE hinst, DWORD dwReason, LPVOID reserved)
 
     if (dwReason == DLL_PROCESS_ATTACH) {
         std::println("[gamespy] attaching redirect.dll");
-        ::MessageBoxW(nullptr, L"attaching redirect.dll", L"Error", MB_OK);
 
         int argc = 0;
         std::string game = GAMESPY_GAMENAME;
@@ -155,13 +154,12 @@ BOOL WINAPI DllMain(HINSTANCE hinst, DWORD dwReason, LPVOID reserved)
         if (!g_redirect) {
             std::println("[gamespy] no address provided, trying to find local server...");
             if (!detect_gamespy(game)) {
-                return TRUE;
+                auto res = ::MessageBoxA(nullptr, "Online Service not available. Continue?", "Error", MB_OKCANCEL | MB_ICONQUESTION);
+                return res == IDOK;
             }
 
             g_redirect = true;
         }
-
-        std::println("[gamespy] redirecting all gamespy lookups to {:d}.{:d}.{:d}.{:d}", g_redirect_address[0], g_redirect_address[1], g_redirect_address[2], g_redirect_address[3]);
 
         DetourRestoreAfterWith();
         DetourTransactionBegin();
@@ -172,6 +170,10 @@ BOOL WINAPI DllMain(HINSTANCE hinst, DWORD dwReason, LPVOID reserved)
             std::println("[gamespy][detours] failed to commit - error ", g_detours_error);
             return FALSE;
         }
+
+        auto message = std::format("redirecting gamespy to {:d}.{:d}.{:d}.{:d}", g_redirect_address[0], g_redirect_address[1], g_redirect_address[2], g_redirect_address[3]);
+        std::println("[gamespy] {}", message);
+        ::MessageBoxA(nullptr, message.c_str(), "Info", MB_OKCANCEL);
     }
     else if (dwReason == DLL_PROCESS_DETACH) {
         std::println("[gamespy] detatching redirect.dll");
