@@ -29,7 +29,7 @@ namespace gamespy {
         template<class R>
             requires std::ranges::range<R>
         sapphire(R&& key)
-            : sapphire(static_cast<unsigned char *>(std::data(key)), static_cast<std::uint8_t>(std::size(key)))
+            : sapphire(static_cast<unsigned char *>(std::data(key)), static_cast<unsigned char>(std::size(key)))
         {
             if (std::size(key) > 255)
                 throw std::overflow_error("Key must not be longer than 255 characters!");
