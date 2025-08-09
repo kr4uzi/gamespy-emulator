@@ -8,11 +8,6 @@ GameSpy Redirector
 - redirect all calls to localhost
 - fix the long startup process
 
-Used libraries / techniques:
-- C++ Coroutines
-- Boost::Asio
-- Microsoft Detours (to inject the redirector into the BF2 process)
-
 Other resources:
 - BF2 Statistics (weapon unlocks)
 - BF2 CD Key Changer: https://github.com/art567/bf2keyman
@@ -28,15 +23,17 @@ Developing:
 Windows: execute the configure.bat, then open the .sln and build the solution using the Visual Studio GUI
 
 Linux:
-- if you want dependencies to be handled by vcpkg: 
-cd ~/source
+- if you want dependencies to be handled by vcpkg:
+```shell
 git clone https://github.com/microsoft/vcpkg.git
 cd vcpkg
 ./vcpkg_bootstrap.sh
+```
 
 - build the emulator
-cd ~/source/gamespy-emulator
+```bash
 ./configure.sh
 cd emulator
 cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE=~/source/vcpkg/scripts/buildsystems/vcpkg.cmake -DCMAKE_CXX_COMPILER=/usr/local/bin/g++
 cmake --build build
+```
