@@ -1,3 +1,3 @@
-LIBRARY "redirect"
+LIBRARY redirect64
 EXPORTS
     DetourFinishHelperProcess @1
