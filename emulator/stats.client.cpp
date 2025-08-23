@@ -149,9 +149,9 @@ boost::asio::awaitable<bool> StatsClient::Authenticate()
 
 	auto _packet = co_await ReceivePacket();
 	auto packet = std::string_view{ _packet };
-	auto gamename = utils::value_for_key(_packet, "gamename");
-	if (packet.empty() || !packet.starts_with("\\auth\\") || !gamename) {
-		std::println("[stats] received invalid response during authentication");
+	auto gamename = utils::value_for_key(_packet, "\\gamename\\");
+	if (packet.empty() || !packet.starts_with("\\auth\\") || !gamename || gamename->empty()) {
+		std::println("[stats] received invalid response during authentication\n{}", packet);
 		co_return false;
 	}
 
@@ -165,7 +165,7 @@ boost::asio::awaitable<bool> StatsClient::Authenticate()
 	const auto& game = co_await m_GameDB.GetGame(*gamename);
 	const auto challenge = std::format("{}{}", g_crc32(m_ServerChallenge), game->secretKey());
 	const auto challengeHash = utils::md5(challenge);
-	if (auto response = utils::value_for_key(_packet, "response"); !response || *response != challengeHash) {
+	if (auto response = utils::value_for_key(_packet, "\\response\\"); !response || *response != challengeHash) {
 		std::println("[stats] received invalid response");
 		co_await SendPacket(R"(\error\\err\0\fatal\\errmsg\Invalid Response!\id\1)");
 		co_return false; 

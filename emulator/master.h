@@ -19,7 +19,6 @@ namespace gamespy {
 		static constexpr std::uint16_t PORT = 27900;
 
 		boost::asio::ip::udp::socket m_Socket;
-		boost::asio::steady_timer m_CleanupTimer;
 		GameDB& m_DB;
 
 		struct server {
@@ -32,19 +31,21 @@ namespace gamespy {
 
 		std::map<boost::asio::ip::udp::endpoint, server> m_AwaitingValidation;
 		std::map<boost::asio::ip::udp::endpoint, server> m_Validated;
+		boost::asio::steady_timer m_CleanupTimer;
 
 	public:
 		MasterServer(boost::asio::io_context& context, GameDB& db);
 		~MasterServer();
 
+		boost::asio::awaitable<void> Run();
+
+	private:
 		boost::asio::awaitable<void> AcceptConnections();
 
 		boost::asio::awaitable<void> HandleAvailable(const boost::asio::ip::udp::endpoint& client, QRPacket& packet);
 		boost::asio::awaitable<void> HandleHeartbeat(const boost::asio::ip::udp::endpoint& client, QRPacket& packet);
 		boost::asio::awaitable<void> HandleKeepAlive(const boost::asio::ip::udp::endpoint& client, QRPacket& packet);
 		boost::asio::awaitable<void> HandleChallenge(const boost::asio::ip::udp::endpoint& client, QRPacket& packet);
-
-	private:
-		void Cleanup(const boost::system::error_code& ec);
+		boost::asio::awaitable<void> Cleanup();
 	};
 }

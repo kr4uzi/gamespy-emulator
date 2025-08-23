@@ -10,6 +10,7 @@
 #include <string>
 #include <string_view>
 #include <vector>
+#include <boost/signals2.hpp>
 
 namespace gamespy {
 	struct GameData
@@ -48,13 +49,20 @@ namespace gamespy {
 		} backend = BackendOptions::qr2_use_query_challenge;
 
 		std::vector<GameKey> keys;
+
+		enum class MissingKeyPolicy
+		{
+			ignore,
+			add_as_string
+		} misssingKeyPolicy = MissingKeyPolicy::ignore;
+
+		static std::vector<GameKey> common_keys();
 	};
 
 	class Game
 	{
 		sqlite::db m_DB; // stores added servers (in-memory)
 		GameData m_Data;
-		bool m_AddMissingParams = false;
 		std::map<std::string_view, const GameData::GameKey*> m_Params; // references to m_Data.keys
 
 		// the (up to) 254 most frequently used values of the key-value pairs of the sever data can be
@@ -83,7 +91,7 @@ namespace gamespy {
 		using IncomingServer = ServerData<std::string_view>;
 		using SavedServer = ServerData<std::string>;
 
-		Game(GameData data, bool autoParams = false);
+		Game(GameData data);
 		virtual ~Game();
 
 		virtual task<void> Connect();
@@ -93,9 +101,12 @@ namespace gamespy {
 		virtual task<std::vector<SavedServer>> GetServers(const std::string_view& query, const std::vector<std::string_view>& fields, std::size_t limit);
 		virtual task<void> RemoveServers(const std::vector<std::pair<std::string_view, std::uint16_t>>& servers);
 
+		boost::signals2::signal<void(const IncomingServer&)> OnServerAdded;
+		boost::signals2::signal<void(const std::string_view&, std::uint16_t)> OnServerRemoved;
+
 		std::string GetMasterServer() const; // calculates the designated master server (%s.ms%d.gamespy.com) for this game
 		auto& GetPopularValues() const { return m_PopularValues; }
-		void SetPopularValues(decltype(m_PopularValues) values) { m_PopularValues.assign_range(values); }
+		void SetPopularValues(decltype(m_PopularValues) values) { CheckPopularValueSize(std::size(values)); m_PopularValues.assign_range(values); }
 
 		auto name() const -> std::string_view { return m_Data.name; }
 		auto secretKey() const { return m_Data.secretKey; }
@@ -107,6 +118,9 @@ namespace gamespy {
 		static bool IsValidParamName(const std::string_view& paramName);
 		KeyType::Send GetParamSendType(const std::string_view& keyName) const;
 		KeyType::Store GetParamStoreType(const std::string_view& keyName) const;
+
+	private:
+		void CheckPopularValueSize(std::size_t size);
 	};
 }
 

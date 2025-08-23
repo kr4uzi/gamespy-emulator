@@ -43,6 +43,12 @@
     <Filter Include="Source Files\games">
       <UniqueIdentifier>{861b507f-a34f-4471-89bb-0d78e97595de}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Header Files\serverbrowsing">
+      <UniqueIdentifier>{65287bfa-1a1f-4119-823b-165bc70a4651}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\serverbrowsing">
+      <UniqueIdentifier>{8ecb325a-6c3b-4ae6-bc2c-5872cdeec269}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="utils.h">
@@ -50,12 +56,6 @@
     </ClInclude>
     <ClInclude Include="asio.h">
       <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="ms.client.h">
-      <Filter>Header Files\gamespy</Filter>
-    </ClInclude>
-    <ClInclude Include="ms.h">
-      <Filter>Header Files\gamespy</Filter>
     </ClInclude>
     <ClInclude Include="sapphire.h">
       <Filter>Header Files\crypto</Filter>
@@ -117,6 +117,15 @@
     <ClInclude Include="game.h">
       <Filter>Header Files\games</Filter>
     </ClInclude>
+    <ClInclude Include="ms.client.h">
+      <Filter>Header Files\serverbrowsing</Filter>
+    </ClInclude>
+    <ClInclude Include="ms.h">
+      <Filter>Header Files\serverbrowsing</Filter>
+    </ClInclude>
+    <ClInclude Include="sb_request.h">
+      <Filter>Header Files\serverbrowsing</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
@@ -124,12 +133,6 @@
     </ClCompile>
     <ClCompile Include="utils.cpp">
       <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="ms.client.cpp">
-      <Filter>Source Files\gamespy</Filter>
-    </ClCompile>
-    <ClCompile Include="ms.cpp">
-      <Filter>Source Files\gamespy</Filter>
     </ClCompile>
     <ClCompile Include="md5.cpp">
       <Filter>Source Files\crypto</Filter>
@@ -187,6 +190,15 @@
     </ClCompile>
     <ClCompile Include="bf2.cpp">
       <Filter>Source Files\games</Filter>
+    </ClCompile>
+    <ClCompile Include="sb_request.cpp">
+      <Filter>Source Files\serverbrowsing</Filter>
+    </ClCompile>
+    <ClCompile Include="ms.client.cpp">
+      <Filter>Source Files\serverbrowsing</Filter>
+    </ClCompile>
+    <ClCompile Include="ms.cpp">
+      <Filter>Source Files\serverbrowsing</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>

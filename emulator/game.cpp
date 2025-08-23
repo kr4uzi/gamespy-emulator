@@ -6,13 +6,31 @@ using namespace gamespy;
 namespace {
 	constexpr auto gamespy_num_master_servers = 20;
 	constexpr auto gamespy_max_registered_keys = 254;
+	constexpr auto gamespy_max_popular_values = 255;
 }
 
-Game::Game(GameData data, bool autoKeys)
-	: m_DB{ data.name, false }, m_Data{ std::move(data) }, m_AddMissingParams(autoKeys)
+std::vector<GameData::GameKey> GameData::common_keys()
+{
+	using Send = GameKey::Send;
+	using Store = GameKey::Store;
+	return {
+		{ "country" },
+		{ "gamemode" },
+		{ "gametype" },
+		{ "gamever" },
+		{ "hostname" },
+		{ "mapname" },
+		{ "maxplayers", Send::as_byte, Store::as_integer },
+		{ "numplayers", Send::as_byte, Store::as_integer },
+		{ "password", Send::as_byte, Store::as_integer }
+	};
+}
+
+Game::Game(GameData data)
+	: m_DB{ data.name, false }, m_Data{ std::move(data) }
 {
 	if (std::size(m_Data.keys) > ::gamespy_max_registered_keys)
-		throw std::range_error{ "too many keys" };
+		throw std::overflow_error{ "too many keys" };
 }
 
 Game::~Game()
@@ -41,10 +59,10 @@ task<void> Game::Connect()
 			sql += std::format(",{} TEXT", key.name);
 			break;
 		case StoreType::as_real:
-			sql += std::format(",{} REAL", key.name);
+			sql += std::format(",{} REAL DEFAULT 0.00", key.name);
 			break;
 		case StoreType::as_integer:
-			sql += std::format(",{} INTEGER", key.name);
+			sql += std::format(",{} INTEGER DEFAULT 0", key.name);
 			break;
 		default:
 			throw std::runtime_error{ std::format("parameter {} of invalid type {}", key.name, static_cast<int>(key.send)) };
@@ -84,6 +102,9 @@ std::string Game::GetMasterServer() const
 
 bool Game::IsValidParamName(const std::string_view& paramName)
 {
+	if (paramName.empty())
+		return false;
+
 	for (const auto& c : paramName) {
 		if (std::isspace(c))
 			return false;
@@ -123,12 +144,14 @@ task<void> Game::AddOrUpdateServer(IncomingServer& server)
 		auto insertKeyValue = false;
 		if (m_Params.contains(key))
 			insertKeyValue = true;
-		else if (m_AddMissingParams) {
+		else if (m_Data.misssingKeyPolicy == GameData::MissingKeyPolicy::add_as_string) {
 			if (!IsValidParamName(key))
 				throw std::runtime_error{ std::format("illegal column name: {}", key) };
 
 			columnsToAdd.push_back(key);
 		}
+		else
+			std::println("[{}] ignoring unknown key: {}", m_Data.name, key);
 
 		if (insertKeyValue) {
 			insertSQL += std::format(",{}", key);
@@ -141,11 +164,14 @@ task<void> Game::AddOrUpdateServer(IncomingServer& server)
 		insertSQL += ",?";
 	insertSQL += ')';
 
-	if (m_AddMissingParams && !columnsToAdd.empty()) {
+	if (!columnsToAdd.empty()) {
 		auto columnSQL = std::string{};
 		for (const auto& column : columnsToAdd) {
 			std::println("[gamedb][{}] new column: {}", m_Data.name, column);
-			columnSQL += std::format("ALTER TABLE server ADD COLUMN {} TEXT DEFAULT '';", column);
+			if (m_Data.misssingKeyPolicy == GameData::MissingKeyPolicy::add_as_string)
+				columnSQL += std::format("ALTER TABLE server ADD COLUMN {} TEXT DEFAULT '';", column);
+			else
+				throw std::runtime_error{ std::format("unknown policy for adding new columns: {}", std::to_underlying(m_Data.misssingKeyPolicy)) };
 		}
 
 		auto guard = m_DB.set_scoped_authorizer([&](auto action, auto detail1, auto detail2, auto dbName, auto trigger) {
@@ -189,6 +215,8 @@ task<void> Game::AddOrUpdateServer(IncomingServer& server)
 
 	stmt.insert();
 
+	OnServerAdded(server);
+
 	// required to make this a coroutine
 	co_return;
 }
@@ -206,7 +234,7 @@ task<std::vector<Game::SavedServer>> Game::GetServers(const std::string_view& qu
 		using auth_action = sqlite::auth_action;
 		using auth_res = sqlite::auth_res;
 		if (action == auth_action::SQLITE_READ && detail1 == "server" && (dbName == "temp" || dbName == "main"))
-			return auth_res::SQLITE_OK;
+			return auth_res::SQLITE_OK; // maybe we need to prevent queries on local{ip\d+|port} columns (=detail2)?
 		else if (action == auth_action::SQLITE_SELECT)
 			return auth_res::SQLITE_OK;
 		else if (action == auth_action::SQLITE_FUNCTION && (detail2 == "like"))
@@ -254,9 +282,17 @@ task<void> Game::RemoveServers(const std::vector<std::pair<std::string_view, std
 		stmt.bind(ip, port);
 		stmt.update();
 		stmt.reset();
+
+		OnServerRemoved(ip, port);
 	}
 
 	co_return;
+}
+
+void Game::CheckPopularValueSize(std::size_t newSize)
+{
+	if (newSize > gamespy_max_popular_values)
+		throw std::overflow_error{ "too many popular values" };
 }
 
 namespace {
@@ -264,7 +300,16 @@ namespace {
 #ifdef _HASHTABLE_H
 #  undef _HASHTABLE_H
 #endif
+	
 	#include <GameSpy/serverbrowsing/sb_internal.h>
 	static_assert(::gamespy_num_master_servers == NUM_MASTER_SERVERS, "NUM_MASTER_SERVERS value missmatch");
 	static_assert(::gamespy_max_registered_keys == MAX_REGISTERED_KEYS, "MAX_REGISTERED_KEYS value missmatch");
+	static_assert(::gamespy_max_popular_values == MAX_POPULAR_VALUES, "MAX_POPULAR_VALUES value missmatch");
+
+	static_assert(KEYTYPE_STRING == std::to_underlying(Game::KeyType::Send::as_string), "KEYTYPE_STRING missmatch");
+	static_assert(KEYTYPE_BYTE == std::to_underlying(Game::KeyType::Send::as_byte), "KEYTYPE_BYTE missmatch");
+	static_assert(KEYTYPE_SHORT == std::to_underlying(Game::KeyType::Send::as_short), "KEYTYPE_SHORT missmatch");
+
+	// check Backend Options bounds
+	static_assert(std::to_underlying(GameData::BackendOptions::qr2_use_query_challenge) == QR2_USE_QUERY_CHALLENGE, "QR2_USE_QUERY_CHALLENGE value missmatch");
 }

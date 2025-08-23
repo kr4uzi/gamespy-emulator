@@ -104,6 +104,7 @@ void sqlite::db::set_authorizer(decltype(m_Authorizer) authorizer)
 		if (m_Authorizer)
 			return sqlite3_set_authorizer(db, [](void* _self, int actionCode, const char* detail1, const char* detail2, const char* detail3, const char* detail4) {
 				auto self = reinterpret_cast<sqlite::db*>(_self);
+				// std::string_view { nullptr } is not allowed, so we use empty string instead
 				auto res = self->m_Authorizer(static_cast<auth_action>(actionCode), detail1 ? detail1 : "", detail2 ? detail2 : "", detail3 ? detail3 : "", detail4 ? detail4 : "");
 				return static_cast<int>(res);
 			}, this);

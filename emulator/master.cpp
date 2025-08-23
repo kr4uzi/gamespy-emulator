@@ -6,6 +6,8 @@
 #include <print>
 #include <span>
 #include <string_view>
+#include <boost/asio/experimental/awaitable_operators.hpp>
+
 using namespace gamespy;
 using boost::asio::ip::udp;
 
@@ -23,28 +25,29 @@ MasterServer::~MasterServer()
 	std::println("[master] shutting down");
 }
 
-void MasterServer::Cleanup(const boost::system::error_code& ec)
+boost::asio::awaitable<void> MasterServer::Cleanup()
 {
-	/*
-	if (ec) return;
+	while (true) {
+		m_CleanupTimer.expires_after(std::chrono::seconds{ 60 });
+		const auto& [error] = co_await m_CleanupTimer.async_wait(boost::asio::as_tuple);
+		if (error) break;
 
-	const auto& now = Clock::now();
-	for (auto& servers : std::array{ &m_AwaitingValidation, &m_Validated }) {
-		for (auto i = servers->begin(); i != servers->end(); ) {
-			auto timeSinceLastUpdate = std::chrono::duration_cast<std::chrono::seconds>(now - i->second.last_update);
-			if (timeSinceLastUpdate > std::chrono::seconds{ 60 }) {
-				std::println("[master][server][{}] {}:{} timed out", i->second.gamename, i->first.address().to_string(), i->first.port());
-				Game& game = co_await m_DB.GetGame(i->second.gamename);
-				game..CleanupServers({ std::make_pair(i->first.address().to_string(), i->first.port()) });
-				i = servers->erase(i);
+		const auto& now = Clock::now();
+		for (auto& servers : std::array{ &m_AwaitingValidation, &m_Validated }) {
+			for (auto i = servers->begin(); i != servers->end(); ) {
+				auto timeSinceLastUpdate = std::chrono::duration_cast<std::chrono::seconds>(now - i->second.last_update);
+				if (timeSinceLastUpdate > std::chrono::seconds{ 60 }) {
+					std::println("[master][server][{}] {}:{} timed out", i->second.gamename, i->first.address().to_string(), i->first.port());
+					auto game = co_await m_DB.GetGame(i->second.gamename);
+					co_await game->RemoveServers({ std::make_pair(i->first.address().to_string(), i->first.port()) });
+					i = servers->erase(i);
+				}
+				else
+					++i;
 			}
-			else
-				++i;
 		}
 	}
-
-	m_CleanupTimer.expires_from_now(std::chrono::seconds{ 60 });
-	m_CleanupTimer.async_wait(boost::bind(&MasterServer::Cleanup, this, boost::asio::placeholders::error));*/
+	
 }
 
 boost::asio::awaitable<void> MasterServer::HandleAvailable(const udp::endpoint& client, QRPacket& packet)
@@ -196,17 +199,20 @@ boost::asio::awaitable<void> MasterServer::HandleChallenge(const udp::endpoint& 
 		std::println("[master] received challenge for an unknown server");
 }
 
+boost::asio::awaitable<void> MasterServer::Run()
+{
+	using namespace boost::asio::experimental::awaitable_operators;
+	co_await (AcceptConnections() && Cleanup());
+}
+
 boost::asio::awaitable<void> MasterServer::AcceptConnections()
 {
-	Cleanup(boost::system::error_code{});
-
 	std::array<std::uint8_t, 1400> buff;
 	while (m_Socket.is_open()) {
 		udp::endpoint client;
-		const auto [error, length] = co_await m_Socket.async_receive_from(boost::asio::buffer(buff), client, boost::asio::as_tuple(boost::asio::use_awaitable));
-		if (error || length == 0)
-			continue;
-			
+		const auto& [error, length] = co_await m_Socket.async_receive_from(boost::asio::buffer(buff), client, boost::asio::as_tuple);
+		if (error || length == 0) break;
+
 		try {
 			auto packet = QRPacket::Parse(std::span{ buff.data(), length });
 			if (!packet) {
@@ -237,5 +243,4 @@ boost::asio::awaitable<void> MasterServer::AcceptConnections()
 			std::println("[master] exception: {}", ex.what());
 		}
 	}
-	
 }

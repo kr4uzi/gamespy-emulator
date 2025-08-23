@@ -8,6 +8,7 @@
 #include "ms.h"
 #include "key.h"
 #include "stats.h"
+#include "bf2.h"
 #include <print>
 #include <iostream>
 #include <fstream>
@@ -67,8 +68,9 @@ task<void> Emulator::Launch(int argc, char* argv[])
 		}
 	};
 
+
 	co_await (
-		wrap("master", m_MasterServer->AcceptConnections())
+		wrap("master", m_MasterServer->Run())
 		&& wrap("login", m_LoginServer->AcceptClients())
 		&& wrap("search", m_SearchServer->AcceptClients())
 		&& wrap("browser", m_BrowserServer->AcceptClients())
@@ -110,30 +112,51 @@ task<void> Emulator::InitGameDB(int argc, char* argv[])
 
 task<void> Emulator::InitPlayerDB(int argc, char* argv[])
 {
-	auto playerDBParams = PlayerDBMySQL::ConnectionParams{};
+	auto params = boost::mysql::connect_params{};
+	std::string host;
+	std::optional<std::uint16_t> port;
+
 	for (int i = 0; i < argc; i++) {
 		auto arg = std::string_view{ argv[i] };
 		if (arg.starts_with("-playerdb=")) {
 			m_PlayerDB = std::make_unique<PlayerDBSQLite>(arg.substr(10));
+			co_await m_PlayerDB->Connect();
 			break;
 		}
 		else if (arg.starts_with("-playerdb-")) {
 			if (arg.starts_with("-playerdb-host="))
-				playerDBParams.hostname = arg.substr(15);
+				host = arg.substr(15);
 			else if (arg.starts_with("-playerdb-port="))
-				playerDBParams.port = std::atoi(arg.substr(15).data());
+				port = std::atoi(arg.substr(15).data());
 			else if (arg.starts_with("-playerdb-username="))
-				playerDBParams.username = arg.substr(19);
+				params.username = arg.substr(19);
 			else if (arg.starts_with("-playerdb-password="))
-				playerDBParams.password = arg.substr(19);
+				params.password = arg.substr(19);
 			else if (arg.starts_with("-playerdb-database="))
-				playerDBParams.database = arg.substr(19);
+				params.database = arg.substr(19);
 		}
 	}
 
-	if (!m_PlayerDB && !playerDBParams.hostname.empty()) {
-		auto mysqlDB = std::make_unique<gamespy::PlayerDBMySQL>(m_Context, std::move(playerDBParams));
+	if (!m_PlayerDB && !host.empty()) {
+		if (port)
+			params.server_address.emplace_host_and_port(host, *port);
+		else
+			params.server_address.emplace_host_and_port(host);
+
+		auto mysqlDB = std::make_unique<gamespy::PlayerDBMySQL>(m_Context, std::move(params));
 		m_PlayerDB = std::move(mysqlDB);
+	}
+
+	if (!m_PlayerDB && m_GameDB && co_await m_GameDB->HasGame("battlefield2")) {
+		auto game = std::dynamic_pointer_cast<BF2>(co_await m_GameDB->GetGame("battlefield2"));
+		if (game) {
+			auto params = game->GetConnectionParams();
+			if (params) {
+				std::println("[emulator] using bf2 mysql params for playerdb");
+				auto mysqlDB = std::make_unique<gamespy::PlayerDBMySQL>(m_Context, *params);
+				m_PlayerDB = std::move(mysqlDB);
+			}
+		}
 	}
 
 	if (!m_PlayerDB) {

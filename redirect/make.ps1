@@ -104,6 +104,7 @@ function Get-GameSpyExecutable {
   $ofd.Filter = "Executables (*.exe)|*.exe|All files (*.*)|*.*"
   $ofd.Title = "Select an executable file"
 
+  Write-Host "Please select a Game for which you want a redirect dll"
   if ($ofd.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) {
       Write-Host "No file selected, exiting."
       return ""
@@ -124,7 +125,7 @@ function Build-Dll {
   )
 
   if (-not $GameName) {
-    $GameName = "battlefield2"
+    $GameName = "gmtest"
   }
 
   if ($DllForwardPath) {
@@ -135,25 +136,47 @@ function Build-Dll {
   $libs = "Ws2_32.lib User32.lib Shell32.lib detours.lib"
   $libDir = "..\dependencies\detours\lib.$Arch"
   $includeDir = "..\dependencies\detours\include"
-  $buildCmd = "cl /LD /EHsc /nologo /std:c++latest /I`"$includeDir`" /D GAMESPY_GAMENAME=\`"$GameName\`" /D DLL_FORWARD_PATH=\`"$DllForwardPath\`" /Fe$TargetName.dll main.cpp $AdditionalTargets $libs /link /LIBPATH:`"$libDir`""
+  $buildCmd = "cl /LD /Ox /EHsc /nologo /std:c++latest /I`"$includeDir`" /D GAMESPY_GAMENAME=\`"$GameName\`" /D DLL_FORWARD_PATH=\`"$DllForwardPath\`" /Fe$TargetName.dll main.cpp $AdditionalTargets $libs /link /LIBPATH:`"$libDir`""
 
+  Write-Host "Compiling ..."
   if ($Arch -eq "x86") {
     $vcEnv = Join-Path $VsInstallDir "VC\Auxiliary\Build\vcvars32.bat"
-    & cmd.exe /c "`"$vcEnv`" && $buildCmd"
+    & cmd.exe /c "`"$vcEnv`" 1>nul && $buildCmd"
   }
   elseif ($Arch -eq "x64") {
     $vcEnv = Join-Path $vsInstallDir "VC\Auxiliary\Build\vcvars64.bat"
-    & cmd.exe /c "`"$VsDevCmd`" -no_logo && `"$vcEnv`" && $buildCmd"
+    & cmd.exe /c "`"$vcEnv`" 1>nul && $buildCmd"
   }
   else {
     Write-Error "Unknowwn Arch: $Arch"
+    return
   }
+
+  if ($LASTEXITCODE -ne 0) {
+    Write-Error "Build failed"
+  }
+
+  Remove-Item *.obj, *.lib, *.exp, exports.def, exports.h -Force -ErrorAction SilentlyContinue
 }
 
 function main {
   param (
     [string]$exePath
   )
+
+  if ($exePath -eq "clean") {
+    Remove-Item *.obj, *.lib, *.exp, *.dll, exports.def, exports.h -Force -ErrorAction SilentlyContinue
+    return
+  }
+
+  Write-Host "Welcome to the GameSpy redirector builder"
+  Write-Host
+  Write-Host "Using this tool, you will be able to create dlls which redirect calls from the now dead GameSpy endpoint"
+  Write-Host "to configurable or autodetected (if the emulator is in your local network) endpoint."
+  Write-Host
+  Write-Host "This works by placing a creating a custom .dll file which is loaded by the game and which"
+  Write-Host "intercepts all lookups to *.gamespy.com, returning the new endpoint."
+  Write-Host
 
   $ErrorActionPreference = "Stop"
   $vsInstallDir = Get-VSInstallDir
@@ -196,20 +219,24 @@ function main {
   Write-Host "Preparing dll ..."
   if ($selection -eq 0) {
     $targetName = "redirect"
-    Set-Content -Path "exports.h" -Value ""
+    Set-Content -Path "exports.h" -Value "" -NoNewline
     Set-Content -Path "exports.def" -Value @"
 LIBRARY redirect32
 EXPORTS
     DetourFinishHelperProcess @1
 "@
     Build-Dll -VsDevCmd $vsDevCmd -VsInstallDir $vsInstallDir -Arch "x86" -TargetName "redirect32" -AdditionalTargets "exports.def"
+
+    Set-Content -Path "exports.h" -Value "" -NoNewline
     Set-Content -Path "exports.def" -Value @"
 LIBRARY redirect64
 EXPORTS
     DetourFinishHelperProcess @1
 "@
     Build-Dll -VsDevCmd $vsDevCmd -VsInstallDir $vsInstallDir -Arch "x64" -TargetName "redirect64" -AdditionalTargets "exports.def"
+    Write-Host
     Write-Host "redirect dlls built - please use withdll.exe to inject the dll into games"
+    Write-Host
     return
   }
   

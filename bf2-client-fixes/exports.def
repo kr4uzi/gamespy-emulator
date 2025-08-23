@@ -1,3 +1,0 @@
-LIBRARY "bf2-client-fixes"
-EXPORTS
-    DetourFinishHelperProcess @1

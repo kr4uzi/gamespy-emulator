@@ -11,24 +11,15 @@ namespace gamespy
 {
 	class BF2 : public Game
 	{
-	public:
-		struct ConnectionParams
-		{
-			std::string hostname;
-			std::uint16_t port;
-			std::string username;
-			std::string password;
-			std::string database;
-		};
-
-	private:
 		boost::mysql::any_connection m_Conn;
-		std::optional<ConnectionParams> m_Params;
+		std::optional<boost::mysql::connect_params> m_Params;
 
 	public:
 		BF2(boost::asio::io_context& context);
-		BF2(boost::asio::io_context& context, ConnectionParams params);
+		BF2(boost::asio::io_context& context, boost::mysql::connect_params params);
 		~BF2();
+
+		auto GetConnectionParams() const noexcept { return m_Params; }
 
 		virtual task<void> Connect() override;
 		virtual task<void> Disconnect() override;

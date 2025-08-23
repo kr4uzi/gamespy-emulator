@@ -66,37 +66,48 @@ task<void> GameDBInMemory::Connect()
 		auto bf2 = std::make_shared<BF2>(m_Context);
 		co_await bf2->Connect();
 		m_Games.emplace("battlefield2", bf2);
-		co_return;
+	}
+	else {
+		for (const auto& entry : m_Config) {
+			auto name = entry.at("name").get<std::string>();
+			auto game = std::shared_ptr<Game>{};
+			if (name == "battlefield2") {
+				auto params = boost::mysql::connect_params{};
+				params.server_address.emplace_host_and_port(entry.at("mysql-host").get<std::string>(), entry.at("mysql-port").get<std::uint16_t>());
+				params.username = entry.at("mysql-username").get<std::string>();
+				params.password = entry.at("mysql-password").get<std::string>();
+				params.database = entry.at("mysql-database").get<std::string>();
+
+				game = std::make_shared<BF2>(m_Context, params);
+			}
+			else {
+				game = std::make_shared<Game>(GameData{
+					.name = std::move(name),
+					.secretKey = entry.at("secretKey").get<std::string>(),
+					.keys = parse_keys(
+						entry.at("keys"),
+						entry.at("sendAsShort"),
+						entry.at("sendAsByte"),
+						entry.at("saveAsReal"),
+						entry.at("ignoredKeys")
+					),
+					.misssingKeyPolicy = entry.at("autoKeys").get<bool>() ? GameData::MissingKeyPolicy::add_as_string : GameData::MissingKeyPolicy::ignore
+				});
+			}
+
+			co_await game->Connect();
+			m_Games.emplace(game->name(), game);
+		}
 	}
 
-	for (const auto& entry : m_Config) {
-		auto name = entry.at("name").get<std::string>();
-		auto game = std::shared_ptr<Game>{};
-		if (name == "battlefield2") {
-			game = std::make_shared<BF2>(m_Context, BF2::ConnectionParams{
-				.hostname = entry.at("mysql-host").get<std::string>(),
-				.port = entry.at("mysql-port").get<std::uint16_t>(),
-				.username = entry.at("mysql-username").get<std::string>(),
-				.password = entry.at("mysql-password").get<std::string>(),
-				.database = entry.at("mysql-database").get<std::string>()
-			});
-		}
-		else {
-			game = std::make_shared<Game>(GameData{
-				.name = std::move(name),
-				.secretKey = entry.at("secretKey").get<std::string>(),
-				.keys = parse_keys(
-					entry.at("keys"),
-					entry.at("sendAsShort"),
-					entry.at("sendAsByte"),
-					entry.at("saveAsReal"),
-					entry.at("ignoredKeys")
-				)
-			}, entry.at("autoKeys").get<bool>());
-		}
-
-		co_await game->Connect();
-		m_Games.emplace(game->name(), game);
+	if (!m_Games.contains("gmtest")) {
+		auto gmtest = std::make_shared<Game>(GameData{
+			.name = "gmtest",
+			.secretKey = "HA6zkS",
+			.keys = GameData::common_keys()
+		});
+		co_await gmtest->Connect();
+		m_Games.emplace("gmtest", gmtest);
 	}
 }
 

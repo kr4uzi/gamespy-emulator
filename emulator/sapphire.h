@@ -5,6 +5,8 @@
 #include <string_view>
 #include <stdexcept>
 #include <ranges>
+#include <concepts>
+#include <cstddef>
 
 // Gamespy uses a slightly modified Sapphire II stream cipher
 // https://cryptography.org/mpj/sapphire.pdf
@@ -42,7 +44,10 @@ namespace gamespy {
         unsigned char encrypt(unsigned char b);
 
         template<class R>
-            requires std::ranges::range<R>
+            requires std::ranges::range<R> && (
+                std::same_as<std::ranges::range_value_t<R>, unsigned char>
+                || std::same_as<std::ranges::range_value_t<R>, std::byte>
+            )
         void encrypt(R&& range) {
             for (auto& c: range)
                 c = encrypt(static_cast<unsigned char>(c));

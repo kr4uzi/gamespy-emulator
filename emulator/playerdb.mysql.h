@@ -9,22 +9,11 @@
 namespace gamespy {
 	class PlayerDBMySQL : public PlayerDB
 	{
-	public:
-		struct ConnectionParams
-		{
-			std::string hostname;
-			std::uint16_t port;
-			std::string username;
-			std::string password;
-			std::string database;
-		};
-
-	private:
 		boost::mysql::any_connection m_Conn;
-		ConnectionParams m_Params;
+		boost::mysql::connect_params m_Params;
 
 	public:
-		PlayerDBMySQL(boost::asio::io_context& context, ConnectionParams params);
+		PlayerDBMySQL(boost::asio::io_context& context, decltype(m_Params) params);
 		~PlayerDBMySQL();
 
 		task<void> Connect() override;

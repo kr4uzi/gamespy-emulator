@@ -1,11 +1,14 @@
 #include "bf2.h"
 #include <print>
+#include <algorithm>
 using namespace gamespy;
 using Send = GameData::GameKey::Send;
 using Store = GameData::GameKey::Store;
 
 namespace key {
-	// bf2 expects all keys as strings
+	// gamespy stores optimized values as strings:
+	// GameSpy/serverbrowsing/sb_serverlist.c:985 (ParseServer)
+	// GameSpy/serverbrowsing/sb_server.c:102 (SBServerAddIntKeyValue)
 	constexpr Game::KeyType text(const char* name)
 	{
 		return {
@@ -28,7 +31,7 @@ namespace key {
 	{
 		return {
 			.name = name,
-			.send = Send::as_string,
+			.send = Send::as_short,
 			.store = Store::as_integer
 		};
 	}
@@ -37,7 +40,7 @@ namespace key {
 	{
 		return {
 			.name = name,
-			.send = Send::as_string,
+			.send = Send::as_byte,
 			.store = Store::as_integer
 		};
 	}
@@ -112,7 +115,7 @@ BF2::BF2(boost::asio::io_context& context)
 
 }
 
-BF2::BF2(boost::asio::io_context& context, ConnectionParams params)
+BF2::BF2(boost::asio::io_context& context, boost::mysql::connect_params params)
 	: Game{ bf2Data }, m_Conn{ context }, m_Params(std::move(params))
 {
 
@@ -132,13 +135,8 @@ task<void> BF2::Connect()
 		co_return;
 	}
 
-	auto params = boost::mysql::connect_params{};
-	params.server_address.emplace_host_and_port(m_Params->hostname, m_Params->port);
-	params.username = m_Params->username;
-	params.password = m_Params->password;
-	params.database = m_Params->database;
-	std::println("[bf2] connecting to {}:{} db={}", m_Params->hostname, m_Params->port, m_Params->database);
-	co_await m_Conn.async_connect(params);
+	std::println("[bf2] connecting to {}:{} db={}", std::string(m_Params->server_address.hostname()), m_Params->server_address.port(), m_Params->database);
+	co_await m_Conn.async_connect(*m_Params);
 }
 
 task<void> BF2::Disconnect()
@@ -152,8 +150,33 @@ task<void> BF2::AddOrUpdateServer(IncomingServer& server)
 	co_await Game::AddOrUpdateServer(server);
 }
 
-task<std::vector<Game::SavedServer>> BF2::GetServers(const std::string_view& query, const std::vector<std::string_view>& fields, std::size_t limit)
+task<std::vector<Game::SavedServer>> BF2::GetServers(const std::string_view& _query, const std::vector<std::string_view>& fields, std::size_t limit)
 {
+	std::string_view query = _query;
+	std::string copy;
+	if (auto pos = query.find(")gametype"); pos != std::string_view::npos) {
+		copy.assign(query);
+		copy.insert(pos + 1, " ");
+		query = copy;
+	}
+
+	auto hostnameQuery = std::string_view{ "hostname like '%" };
+	if (auto pos = query.find(hostnameQuery); pos != std::string_view::npos) {
+		pos += hostnameQuery.size();
+		auto end = query.find("%'", pos);
+		if (end != std::string_view::npos) {
+			copy.assign(query);
+			for (; pos < end; pos++) {
+				if (copy[pos] == '\'') {
+					copy.insert(pos, "'");
+					pos++; // skip the character we just inserted
+					end++;
+				}
+			}
+			query = copy;
+		}
+	}
+
 	auto servers = co_await Game::GetServers(query, fields, limit);
 	if (!m_Params)
 		co_return servers;

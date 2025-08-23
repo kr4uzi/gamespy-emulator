@@ -4,6 +4,7 @@
     "boost-crc",
     "boost-serialization",
     "boost-mysql",
+    "boost-signals2",
     "nlohmann-json",
     "openssl",
     "sqlite3"

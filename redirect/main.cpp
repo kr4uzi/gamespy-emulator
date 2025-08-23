@@ -2,8 +2,15 @@
 #include <print>
 #include <iostream>
 #include <string>
+#include <string_view>
 #include <memory>
 #include <vector>
+#include <type_traits>
+#include <stdexcept>
+#include <filesystem>
+#include <map>
+#include <regex>
+#include <tuple>
 #define _WINSOCK_DEPRECATED_NO_WARNINGS // gethostbyname is deprecated
 #include <WinSock2.h>
 #include <Windows.h>
@@ -14,99 +21,54 @@
 //
 // redirect all dns lookup requests to configured (+gamespy launch parameter) or autodetected gamespy emulator
 //
-bool g_redirect = false;
-LONG g_detours_error = 0;
+bool should_redirect(const char* name)
+{
+    return name && (std::strstr(name, "gamespy") || std::strstr(name, "dice.se"));
+}
+LONG g_detours_error = -1;
 auto gs_gethostbyname = ::gethostbyname;
 std::array<char, 4> g_redirect_address;
 hostent* WINAPI redirect_gethostbyname(const char* name)
 {
-    if (!g_redirect || !name || !std::strstr(name, "gamespy")) {
-        std::println("[gamespy] forwarding {}", name);
-        return gs_gethostbyname(name);
+    if (::should_redirect(name)) {
+        static auto addr_list = std::array<char*, 2>{ g_redirect_address.data(), nullptr };
+        thread_local auto host = std::string{ name };
+        thread_local auto instance = hostent{
+            .h_name = host.data(),
+            .h_aliases = { nullptr },
+            .h_addrtype = AF_INET,
+            .h_length = sizeof(in_addr),
+            .h_addr_list = addr_list.data()
+        };
+
+        std::println("[gamespy] redirecting {}", name);
+        return &instance;
     }
 
-    static auto addr_list = std::array<char*, 2>{ g_redirect_address.data(), nullptr };
-    thread_local auto host = std::string{ name };
-    thread_local auto instance = hostent{
-        .h_name = host.data(),
-        .h_aliases = { nullptr },
-        .h_addrtype = AF_INET,
-        .h_length = sizeof(in_addr),
-        .h_addr_list = addr_list.data()
-    };
-
-    std::println("[gamespy] redirecting {}", name);
-    return &instance; 
+    std::println("[gamespy] forwarding {}", name ? name : "(null)");
+    return gs_gethostbyname(name);  
 }
 static_assert(std::is_same_v<decltype(gs_gethostbyname), decltype(&redirect_gethostbyname)>, "gamespy and redirect gethostbyname signature must match");
 
-bool detect_gamespy(const std::string_view& game)
+auto gs_getaddrinfo = ::getaddrinfo;
+int WINAPI redirect_getaddrinfo(const char* name, const char* service, const addrinfo* hints, addrinfo** result)
 {
-    ::WSADATA wsaData;
-    if (::WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
-        std::println(std::cerr, "[gamespy] windows sockets failed to initialize");
-        return false;
-    }
+    if (should_redirect(name))
+    {
+        std::println("[gamespy] redirecting {}", name);
 
-    auto sock = ::socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-    if (sock == INVALID_SOCKET) {
-        std::println(std::cerr, "[gamespy] failed to create UDP socket");
-        ::WSACleanup();
-        return false;
-    }
-
-    struct _cleanup {
-        decltype(sock)& _sock;
-        ~_cleanup()
-        {
-            ::closesocket(_sock);
-            ::WSACleanup();
+        char ipbuf[INET_ADDRSTRLEN] = {};
+        if (!::inet_ntop(AF_INET, g_redirect_address.data(), ipbuf, sizeof(ipbuf))) {
+            return EAI_FAIL;
         }
-    } cleanup{ sock };
 
-    BOOL broadcastEnabled = TRUE;
-    if (::setsockopt(sock, SOL_SOCKET, SO_BROADCAST, reinterpret_cast<char*>(&broadcastEnabled), sizeof(broadcastEnabled)) < 0) {
-        std::println(std::cerr, "[gamespy] failed to enable UDP broadcast");
-        return false;
+        return gs_getaddrinfo(ipbuf, service, hints, result);
     }
 
-    DWORD timeout = 5000;
-    if (::setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<char*>(&timeout), sizeof(timeout)) < 0) {
-        std::println(std::cerr, "[gamespy] failed enable timeout");
-    }
-
-
-    ::sockaddr_in broadcastAddr;
-    std::memset(&broadcastAddr, 0, sizeof(broadcastAddr));
-    broadcastAddr.sin_family = AF_INET;
-    broadcastAddr.sin_port = htons(27900); // gamepsy master port
-    broadcastAddr.sin_addr.s_addr = INADDR_BROADCAST;
-
-    std::vector<char> message = { 9, 0, 0, 0, 0 };
-    message.append_range(game);
-    message.push_back(0);
-
-    if (::sendto(sock, message.data(), static_cast<int>(message.size()), 0, (struct sockaddr*)&broadcastAddr, sizeof(broadcastAddr)) < 0) {
-        std::println(std::cerr, "[gamespy] failed to broadcast to gamespy master server (UDP:27900)");
-        return false;
-    }
-
-    std::println("[gamespy] waiting for gamespy master server response...");
-    char buffer[8];
-    ::sockaddr_in responseAddr;
-    int responseAddrLen = sizeof(responseAddr);
-    if (::recvfrom(sock, buffer, sizeof(buffer), 0, (struct sockaddr*)&responseAddr, &responseAddrLen) < 0) {
-        std::println(std::cerr, "[gamespy] no response from gamespy master server");
-        return false;
-    }
-
-    std::array<char, INET_ADDRSTRLEN> responseIP;
-    ::inet_ntop(AF_INET, &responseAddr.sin_addr, responseIP.data(), responseIP.size());
-    std::println("[gamespy] response received from {}", responseIP);
-    std::println("[gamespy] redirecting all requests to {}", responseIP);
-    std::memcpy(g_redirect_address.data(), &responseAddr.sin_addr, g_redirect_address.size());
-    return true;
+    std::println("[gamespy] forwarding {}", name ? name : "(null)");
+    return gs_getaddrinfo(name, service, hints, result);
 }
+static_assert(std::is_same_v<decltype(gs_getaddrinfo), decltype(&redirect_getaddrinfo)>, "gamespy and redirect getaddrinfo signature must match");
 
 std::string to_utf8(const wchar_t* wstr)
 {
@@ -117,9 +79,140 @@ std::string to_utf8(const wchar_t* wstr)
     return str;
 }
 
+class WindowsError : std::exception
+{
+    std::wstring m_Message;
+    std::string m_MessageUTF8;
+
+public:
+    WindowsError(DWORD error)
+        : m_Message(ErrorMessageFromErrorCode(error)), m_MessageUTF8(to_utf8(m_Message.c_str()))
+    {
+
+    }
+
+    virtual const wchar_t* wwhat() const noexcept          { return m_Message.c_str();     }
+    virtual const char*     what() const noexcept override { return m_MessageUTF8.c_str(); }
+
+    static std::wstring ErrorMessageFromErrorCode(DWORD errorCode)
+    {
+        auto messageFlags = FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS;
+        auto langId = MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT);
+        wchar_t* messageBuffer = nullptr;
+        auto msgLength = FormatMessageW(messageFlags, nullptr, errorCode, langId, reinterpret_cast<LPWSTR>(&messageBuffer), 0, nullptr);
+        if (msgLength > 0) {
+            auto bufferCleanup = std::unique_ptr<wchar_t, decltype(&::LocalFree)>{ messageBuffer, ::LocalFree };
+            return messageBuffer;
+        }
+
+        return std::format(L"Failed to retrieve error message for code {}", errorCode);
+    }
+};
+
+bool detect_gamespy(const std::string_view& game)
+{
+    auto sock = ::socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (sock == INVALID_SOCKET)
+        throw WindowsError(::WSAGetLastError());
+
+    struct socket_cleanup {
+        decltype(sock)& _sock;
+        ~socket_cleanup() { ::closesocket(_sock); }
+    } cleanup{ sock };
+
+    BOOL broadcastEnabled = TRUE;
+    if (::setsockopt(sock, SOL_SOCKET, SO_BROADCAST, reinterpret_cast<char*>(&broadcastEnabled), sizeof(broadcastEnabled)) != 0)
+        throw WindowsError(::WSAGetLastError());
+
+    DWORD timeout = 5000;
+    if (::setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<char*>(&timeout), sizeof(timeout)) != 0) {
+        // non-critical error
+        std::println(std::cerr, "[gamespy] failed enable timeout");
+    }
+
+    ::sockaddr_in broadcastAddr;
+    std::memset(&broadcastAddr, 0, sizeof(broadcastAddr));
+    broadcastAddr.sin_family = AF_INET;
+    broadcastAddr.sin_port = htons(27900); // gamepsy master port
+    broadcastAddr.sin_addr.s_addr = INADDR_BROADCAST;
+
+    std::vector<char> availablePacket = { 9, 0, 0, 0, 0 };
+    availablePacket.append_range(game);
+    availablePacket.push_back(0);
+
+    if (::sendto(sock, availablePacket.data(), static_cast<int>(availablePacket.size()), 0, (struct sockaddr*)&broadcastAddr, sizeof(broadcastAddr)) < 0)
+        return false;
+
+    std::println("[gamespy] waiting for gamespy master server response...");
+    char buffer[8];
+    ::sockaddr_in responseAddr;
+    int responseAddrLen = sizeof(responseAddr);
+    if (::recvfrom(sock, buffer, sizeof(buffer), 0, (struct sockaddr*)&responseAddr, &responseAddrLen) < 0)
+        return false;
+
+    static_assert(sizeof(g_redirect_address) == sizeof(decltype(responseAddr)::sin_addr), "IP Address Length Missmatch");
+    std::memcpy(g_redirect_address.data(), &responseAddr.sin_addr, g_redirect_address.size());
+    return true;
+}
+
 //
 // inject redirect of all gamespy lookups
 //
+bool detour_gethostbyname()
+{
+    ::WSADATA wsaData;
+    if (::WSAStartup(MAKEWORD(2, 2), &wsaData) != 0)
+        throw WindowsError(::WSAGetLastError());
+
+    struct wsa_cleanup {
+        ~wsa_cleanup() { ::WSACleanup(); }
+    } cleanup;
+
+    int argc = 0;
+    std::string game = GAMESPY_GAMENAME;
+    std::unique_ptr<LPWSTR[], decltype(&::LocalFree)> argv(::CommandLineToArgvW(::GetCommandLineW(), &argc), ::LocalFree);
+    for (int i = 0; i < argc - 1; i++) {
+        auto arg = std::wstring_view{ argv[i] };
+        if (arg == L"+gamename") {
+            game = to_utf8(argv[i + 1]);
+        }
+        else if (arg == L"+gamespy") {
+            auto hints = ::ADDRINFOW{
+                .ai_family = AF_INET,
+                .ai_socktype = SOCK_DGRAM
+            };
+            ::ADDRINFOW* addrInfo = nullptr;
+            if (auto res = ::GetAddrInfoW(argv[i + 1], nullptr, &hints, &addrInfo); res != 0)
+                throw WindowsError(::WSAGetLastError());
+
+            auto ipv4 = reinterpret_cast<sockaddr_in*>(addrInfo->ai_addr);
+            static_assert(sizeof(g_redirect_address) == sizeof(std::remove_pointer_t<decltype(ipv4)>::sin_addr), "IP Address Length Missmatch");
+            std::memcpy(g_redirect_address.data(), &ipv4->sin_addr, g_redirect_address.size());
+            ::FreeAddrInfoW(addrInfo);
+        }
+    }
+
+    if (g_redirect_address == decltype(g_redirect_address){}) {
+        std::println("[gamespy] no address provided, trying to find local server...");
+        if (!detect_gamespy(game)) {
+            auto res = ::MessageBoxA(nullptr, "Online Service not available. Continue?", "Error", MB_OKCANCEL | MB_ICONQUESTION);
+            return res == IDOK;
+        }
+    }
+
+    DetourRestoreAfterWith();
+    DetourTransactionBegin();
+    DetourUpdateThread(GetCurrentThread());
+    DetourAttach(&gs_gethostbyname, redirect_gethostbyname);
+    DetourAttach(&gs_getaddrinfo, redirect_getaddrinfo);
+    g_detours_error = DetourTransactionCommit();
+    if (g_detours_error) {
+        std::println("[gamespy][detours] failed to commit - error ", g_detours_error);
+    }
+
+    return g_detours_error == 0;
+}
+
 BOOL WINAPI DllMain(HINSTANCE hinst, DWORD dwReason, LPVOID reserved)
 {
     (void)hinst;
@@ -130,57 +223,76 @@ BOOL WINAPI DllMain(HINSTANCE hinst, DWORD dwReason, LPVOID reserved)
     }
 
     if (dwReason == DLL_PROCESS_ATTACH) {
-        std::println("[gamespy] attaching redirect.dll");
+        std::println("[gamespy] attaching redirect dll");
 
-        int argc = 0;
-        std::string game = GAMESPY_GAMENAME;
-        std::unique_ptr<LPWSTR[], decltype(&::LocalFree)> argv(::CommandLineToArgvW(::GetCommandLineW(), &argc), ::LocalFree);
-        for (int i = 0; i < argc - 1; i++) {
-            using namespace std::string_view_literals;
-            if (argv[i] == L"gamename"sv) {
-                game = to_utf8(argv[i + 1]);
-            }
-            else if (!g_redirect && argv[i] == L"+gamespy"sv) {
-                if (::InetPtonW(AF_INET, argv[i + 1], g_redirect_address.data()) != 1) {
-                    auto message = std::format(L"the gamespy address is invalid {}", argv[i + 1]);
-                    ::MessageBoxW(nullptr, message.c_str(), L"Error", MB_OK);
-                    return FALSE;
-                }
+        try {
+            if (!detour_gethostbyname())
+                return FALSE;
 
-                g_redirect = true;
-            }
+            auto responseIP = std::string(INET_ADDRSTRLEN, 0);
+            ::inet_ntop(AF_INET, g_redirect_address.data(), responseIP.data(), responseIP.size());
+            std::println("[gamespy] redirecting all requests to {}", responseIP);
+        }
+        catch (const WindowsError& e) {
+            std::wcout << L"[gamespy] error attaching redirect dll: " << e.wwhat() << std::endl;
+            ::MessageBoxW(nullptr, e.wwhat(), L"GameSpy Initialization Error", MB_OK);
+        }
+        catch (std::exception& e) {
+
+            std::println(std::cerr, "[gamespy] error attaching redirect dll: {}", e.what());
+            ::MessageBoxA(nullptr, e.what(), "GameSpy Initialization Error", MB_OK);
         }
 
-        if (!g_redirect) {
-            std::println("[gamespy] no address provided, trying to find local server...");
-            if (!detect_gamespy(game)) {
-                auto res = ::MessageBoxA(nullptr, "Online Service not available. Continue?", "Error", MB_OKCANCEL | MB_ICONQUESTION);
-                return res == IDOK;
-            }
+        std::error_code ec;
+		std::vector<std::filesystem::path> unorderdDlls;
+        std::map<unsigned, std::filesystem::path> dlls;
+        auto options = std::filesystem::directory_options::follow_directory_symlink | std::filesystem::directory_options::skip_permission_denied;
+        auto [pattern, unordered] = [] {
+            if constexpr (std::is_same_v<std::filesystem::path::value_type, char>)
+                return std::tuple(std::regex{ ".*-(\\d+)-inject\\.dll", std::regex::icase }, "inject.dll");
+            else if constexpr (std::is_same_v<std::filesystem::path::value_type, wchar_t>)
+				return std::tuple(std::wregex{ L".*-(\\d+)-inject\\.dll", std::regex::icase }, L"inject.dll");
+            else
+                static_assert(false, "unknown filesystem");
+        }();
 
-            g_redirect = true;
+        for (const auto& entry : std::filesystem::directory_iterator(".", options, ec)) {
+            if (!entry.is_regular_file()) continue;
+
+            std::match_results<std::filesystem::path::string_type::const_iterator> match;
+            auto filename = entry.path().filename().native();
+            if (std::regex_match(filename, match, pattern)) {
+                unsigned num = std::stoul(match[1].str());
+                dlls[num] = entry.path();
+            } else if (filename.ends_with(unordered))
+				unorderdDlls.push_back(entry.path());
         }
 
-        DetourRestoreAfterWith();
-        DetourTransactionBegin();
-        DetourUpdateThread(GetCurrentThread());
-        DetourAttach((PVOID*)&gs_gethostbyname, redirect_gethostbyname);
-        g_detours_error = DetourTransactionCommit();
-        if (g_detours_error) {
-            std::println("[gamespy][detours] failed to commit - error ", g_detours_error);
-            return FALSE;
-        }
+#ifdef _WIN32
+        auto loadLib = [](const std::filesystem::path::value_type* path) {
+            if constexpr (std::is_same_v<std::filesystem::path::value_type, char>)
+                return ::LoadLibraryA(path);
+            else if constexpr (std::is_same_v<std::filesystem::path::value_type, wchar_t>)
+                return ::LoadLibraryW(path);
+            else
+                static_assert(false, "unknown filesystem");
+        };
+#endif
 
-        auto message = std::format("redirecting gamespy to {:d}.{:d}.{:d}.{:d}", g_redirect_address[0], g_redirect_address[1], g_redirect_address[2], g_redirect_address[3]);
-        std::println("[gamespy] {}", message);
-        ::MessageBoxA(nullptr, message.c_str(), "Info", MB_OKCANCEL);
+        for (const auto& [num, path] : dlls)
+			loadLib(path.c_str());
+        
+        for (const auto& path: unorderdDlls)
+			loadLib(path.c_str());
     }
     else if (dwReason == DLL_PROCESS_DETACH) {
-        std::println("[gamespy] detatching redirect.dll");
+        std::println("[gamespy] detatching redirect dll");
+
         if (!g_detours_error) {
             DetourTransactionBegin();
             DetourUpdateThread(GetCurrentThread());
-            DetourDetach((PVOID*)&gs_gethostbyname, redirect_gethostbyname);
+            DetourDetach(&gs_getaddrinfo, redirect_getaddrinfo);
+            DetourDetach(&gs_gethostbyname, redirect_gethostbyname);
             g_detours_error = DetourTransactionCommit();
         }
         else {
@@ -188,7 +300,7 @@ BOOL WINAPI DllMain(HINSTANCE hinst, DWORD dwReason, LPVOID reserved)
         }
 
         if (g_detours_error) {
-            std::println("[gamespy][detours] failed to commit - error ", g_detours_error);
+            std::println(std::cerr, "[gamespy][detours] failed to commit - error ", g_detours_error);
             return FALSE;
         }
     }

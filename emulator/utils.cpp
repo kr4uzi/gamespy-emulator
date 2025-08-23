@@ -134,7 +134,7 @@ std::optional<std::string_view> utils::value_for_key(const std::span<const char>
 	start += key.length();
 	auto end = start;
 	auto delim = key[0];
-	while (_textPacket[end] != delim && _textPacket[end] != '\0' && end < _textPacket.size())
+	while (end < _textPacket.size() && _textPacket[end] != delim && _textPacket[end] != '\0')
 		end++;
 
 	if (end == _textPacket.size())

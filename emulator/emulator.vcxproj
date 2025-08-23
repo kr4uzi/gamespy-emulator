@@ -193,6 +193,7 @@
     <ClInclude Include="qr.h" />
     <ClInclude Include="sapphire.h" />
     <ClInclude Include="emulator.h" />
+    <ClInclude Include="sb_request.h" />
     <ClInclude Include="sqlite.h" />
     <ClInclude Include="stats.client.h" />
     <ClInclude Include="stats.h" />
@@ -220,6 +221,7 @@
     <ClCompile Include="qr.cpp" />
     <ClCompile Include="sapphire.cpp" />
     <ClCompile Include="emulator.cpp" />
+    <ClCompile Include="sb_request.cpp" />
     <ClCompile Include="sqlite.cpp" />
     <ClCompile Include="stats.client.cpp" />
     <ClCompile Include="stats.cpp" />

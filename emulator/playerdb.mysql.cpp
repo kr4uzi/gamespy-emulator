@@ -2,7 +2,7 @@
 #include <print>
 using namespace gamespy;
 
-PlayerDBMySQL::PlayerDBMySQL(boost::asio::io_context& context, ConnectionParams params)
+PlayerDBMySQL::PlayerDBMySQL(boost::asio::io_context& context, decltype(m_Params) params)
 	: m_Conn{ context }, m_Params{ std::move(params) }
 {
 
@@ -15,13 +15,8 @@ PlayerDBMySQL::~PlayerDBMySQL()
 
 task<void> PlayerDBMySQL::Connect()
 {
-	auto params = boost::mysql::connect_params{};
-	params.server_address.emplace_host_and_port(m_Params.hostname, m_Params.port);
-	params.username = m_Params.username;
-	params.password = m_Params.password;
-	params.database = m_Params.database;
-	std::println("[playerdb] connecting to {}:{} db={}", m_Params.hostname, m_Params.port, m_Params.database);
-	co_await m_Conn.async_connect(params);
+	std::println("[playerdb] connecting to {}:{} db={}", std::string(m_Params.server_address.hostname()), m_Params.server_address.port(), m_Params.database);
+	co_await m_Conn.async_connect(m_Params);
 }
 
 task<void> PlayerDBMySQL::Disconnect()

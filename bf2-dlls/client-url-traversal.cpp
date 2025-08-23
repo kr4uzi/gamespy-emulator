@@ -2,7 +2,7 @@
 #include <string_view>
 #include <type_traits>
 #include <GameSpy/ghttp/ghttp.h>
-#include <detours/detours.h>
+#include <detours.h>
 
 LONG g_detours_error = 0;
 
