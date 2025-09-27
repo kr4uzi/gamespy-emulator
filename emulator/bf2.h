@@ -25,7 +25,7 @@ namespace gamespy
 		virtual task<void> Disconnect() override;
 
 		virtual task<void> AddOrUpdateServer(IncomingServer& server) override;
-		virtual task<std::vector<SavedServer>> GetServers(const std::string_view& query, const std::vector<std::string_view>& fields, std::size_t limit) override;
+		virtual task<std::vector<SavedServer>> GetServers(const std::string_view& query, const std::vector<std::string_view>& fields, std::size_t limit, std::size_t skip) override;
 	};
 }
 

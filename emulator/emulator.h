@@ -15,6 +15,7 @@ namespace gamespy
 	class BrowserServer;
 	class CDKeyServer;
 	class StatsServer;
+	class AdminServer;
 	class Emulator
 	{
 		boost::asio::io_context& m_Context;
@@ -26,6 +27,7 @@ namespace gamespy
 		std::unique_ptr<BrowserServer> m_BrowserServer;
 		std::unique_ptr<CDKeyServer> m_CDKeyServer;
 		std::unique_ptr<StatsServer> m_StatsServer;
+		std::unique_ptr<AdminServer> m_AdminServer;
 
 	public:
 		Emulator(boost::asio::io_context& context);

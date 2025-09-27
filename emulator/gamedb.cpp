@@ -129,6 +129,15 @@ task<std::shared_ptr<Game>> GameDBInMemory::GetGame(const std::string_view& name
 	co_return m_Games.at(name);
 }
 
+task<std::vector<std::shared_ptr<Game>>> GameDBInMemory::GetGames()
+{
+	auto games = std::vector<std::shared_ptr<Game>>{};
+	for (const auto& [name, game] : m_Games)
+		games.push_back(game);
+	
+	co_return games;
+}
+
 bool GameDBInMemory::ValidateConfig(const nlohmann::json& config)
 {
 	return true;

@@ -3,7 +3,6 @@
 #include "playerdb.h"
 #include "gamedb.h"
 #include "game.h"
-#include "utils.h"
 #include <print>
 #include <ctime>
 #include <sstream>
@@ -35,6 +34,22 @@ namespace {
 
 		return hash;
 	}
+
+	boost::asio::experimental::coro<std::span<char>> packet_reader(boost::asio::ip::tcp::socket& sock)
+	{
+		constexpr auto packetEnd = std::string_view{ "\\final\\" };
+		while (sock.is_open()) {
+			std::string buffer;
+			const auto& [error, length] = co_await boost::asio::async_read_until(sock, boost::asio::dynamic_buffer(buffer), packetEnd, boost::asio::as_tuple);
+			if (error) break;
+
+			auto encoded = std::span(buffer.data(), length - packetEnd.size());
+			utils::gs_xor(encoded, utils::xor_types::GameSpy3D);
+			co_yield std::span(buffer.data(), length);
+
+			buffer.erase(0, length);
+		}
+	}
 }
 
 StatsClient::StatsClient(boost::asio::ip::tcp::socket socket, GameDB& gameDB, PlayerDB& playerDB)
@@ -48,6 +63,7 @@ StatsClient::~StatsClient()
 
 }
 
+#if 0
 boost::asio::awaitable<std::span<char>> StatsClient::ReceivePacket()
 {
 	m_RecvBuffer.erase(0, m_LastPacketSize);
@@ -60,6 +76,7 @@ boost::asio::awaitable<std::span<char>> StatsClient::ReceivePacket()
 	m_LastPacketSize = length;
 	co_return std::span(m_RecvBuffer.data(), length);
 }
+#endif
 
 boost::asio::awaitable<void> StatsClient::SendPacket(std::string message)
 {
@@ -69,10 +86,15 @@ boost::asio::awaitable<void> StatsClient::SendPacket(std::string message)
 
 boost::asio::awaitable<void> StatsClient::Process()
 {
-	if (!co_await Authenticate())
+	auto reader = ::packet_reader(m_Socket);
+	if (!co_await Authenticate(reader))
 		co_return;
 
-	for (auto _packet = co_await ReceivePacket(); !_packet.empty(); _packet = co_await ReceivePacket()) {
+	while (true) {
+	//for (auto _packet = co_await ReceivePacket(); !_packet.empty(); _packet = co_await ReceivePacket()) {
+		auto __packet = co_await reader.async_resume(boost::asio::use_awaitable);
+		if (!__packet) break;
+		auto& _packet = *__packet;
 		auto packet = std::string_view{ _packet };
 		if (packet.starts_with("\\getpid\\")) {
 			// "\getpid\\nick\%s\keyhash\%s\lid\%d"
@@ -140,14 +162,17 @@ boost::asio::awaitable<void> StatsClient::Process()
 	}
 }
 
-boost::asio::awaitable<bool> StatsClient::Authenticate()
+boost::asio::awaitable<bool> StatsClient::Authenticate(boost::asio::experimental::coro<std::span<char>>& reader)
 {
 	// the client expects 38 bytes minimum => min challenge length is 10
 	m_ServerChallenge = utils::random_string("ABCDEFGHIJKLMNOPQRSTUVWXYZ", 10);
 
 	co_await SendPacket(std::format(R"(\lc\1\challenge\{}\id\1)", m_ServerChallenge));
 
-	auto _packet = co_await ReceivePacket();
+	//auto _packet = co_await ReceivePacket();
+	auto __packet = co_await reader.async_resume(boost::asio::use_awaitable);
+	if (!__packet) co_return false;
+	auto& _packet = *__packet;
 	auto packet = std::string_view{ _packet };
 	auto gamename = utils::value_for_key(_packet, "\\gamename\\");
 	if (packet.empty() || !packet.starts_with("\\auth\\") || !gamename || gamename->empty()) {

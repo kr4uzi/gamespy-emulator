@@ -5,6 +5,8 @@
     "boost-serialization",
     "boost-mysql",
     "boost-signals2",
+    "boost-url",
+    "boost-beast",
     "nlohmann-json",
     "openssl",
     "sqlite3"

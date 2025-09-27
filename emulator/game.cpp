@@ -20,9 +20,9 @@ std::vector<GameData::GameKey> GameData::common_keys()
 		{ "gamever" },
 		{ "hostname" },
 		{ "mapname" },
-		{ "maxplayers", Send::as_byte, Store::as_integer },
-		{ "numplayers", Send::as_byte, Store::as_integer },
-		{ "password", Send::as_byte, Store::as_integer }
+		{ "maxplayers", Send::as_byte, Store::as_integer, "integer" },
+		{ "numplayers", Send::as_byte, Store::as_integer, "integer" },
+		{ "password", Send::as_byte, Store::as_integer, "boolean" }
 	};
 }
 
@@ -221,7 +221,7 @@ task<void> Game::AddOrUpdateServer(IncomingServer& server)
 	co_return;
 }
 
-task<std::vector<Game::SavedServer>> Game::GetServers(const std::string_view& query, const std::vector<std::string_view>& fields, std::size_t limit)
+task<std::vector<Game::SavedServer>> Game::GetServers(const std::string_view& query, const std::vector<std::string_view>& fields, std::size_t limit, std::size_t skip)
 {
 	auto error = std::string{};
 
@@ -250,6 +250,9 @@ task<std::vector<Game::SavedServer>> Game::GetServers(const std::string_view& qu
 
 	sql += std::format(" LIMIT {}", limit);
 
+	if (skip)
+		sql += std::format(" OFFSET {}", skip);
+
 	auto servers = std::vector<Game::SavedServer>{};
 
 	try {
@@ -262,7 +265,7 @@ task<std::vector<Game::SavedServer>> Game::GetServers(const std::string_view& qu
 				.public_port = stmt.column_at<std::uint16_t>(2)
 			};
 
-			for (std::size_t i = 0; i < fields.size(); i++)
+			for (std::size_t i = 0, size = fields.size(); i < size; i++)
 				server.data.emplace(fields[i], stmt.column_at<std::string>(i + 3));
 
 			servers.push_back(server);

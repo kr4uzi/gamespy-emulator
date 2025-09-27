@@ -6,6 +6,7 @@
 #include "task.h"
 #include <map>
 #include <memory>
+#include <vector>
 #include <nlohmann/json.hpp>
 #include <string_view>
 
@@ -22,6 +23,7 @@ namespace gamespy {
 
 		virtual task<bool> HasGame(const std::string_view& name) = 0;
 		virtual task<std::shared_ptr<Game>> GetGame(const std::string_view& name) = 0;
+		virtual task<std::vector<std::shared_ptr<Game>>> GetGames() = 0;
 	};
 
 	class GameDBInMemory : public GameDB
@@ -40,6 +42,7 @@ namespace gamespy {
 
 		virtual task<bool> HasGame(const std::string_view& name) override;
 		virtual task<std::shared_ptr<Game>> GetGame(const std::string_view& name) override;
+		virtual task<std::vector<std::shared_ptr<Game>>> GetGames() override;
 
 		static bool ValidateConfig(const nlohmann::json& config);
 	};

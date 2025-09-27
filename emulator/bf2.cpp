@@ -14,7 +14,8 @@ namespace key {
 		return {
 			.name = name,
 			.send = Send::as_string,
-			.store = Store::as_text
+			.store = Store::as_text,
+			.type = "string"
 		};
 	}
 
@@ -23,7 +24,8 @@ namespace key {
 		return {
 			.name = name,
 			.send = Send::as_string,
-			.store = Store::as_real
+			.store = Store::as_real,
+			.type = "float"
 		};
 	}
 
@@ -32,16 +34,28 @@ namespace key {
 		return {
 			.name = name,
 			.send = Send::as_short,
-			.store = Store::as_integer
+			.store = Store::as_integer,
+			.type = "integer"
 		};
 	}
 
-	constexpr Game::KeyType byte(const char* name)
+	constexpr Game::KeyType boolean(const char* name)
 	{
 		return {
 			.name = name,
 			.send = Send::as_byte,
-			.store = Store::as_integer
+			.store = Store::as_integer,
+			.type = "boolean"
+		};
+	}
+
+	constexpr Game::KeyType ipaddr(const char* name)
+	{
+		return {
+			.name = name,
+			.send = Send::as_string,
+			.store = Store::as_text,
+			.type = "ip"
 		};
 	}
 }
@@ -60,30 +74,30 @@ const auto bf2Data = GameData{
 		key::shrt("numplayers"),
 		key::shrt("maxplayers"),
 		key::text("gamemode"),
-		key::byte("password"),
+		key::boolean("password"),
 		key::shrt("timelimit"),
 		key::shrt("roundtime"),
 		key::shrt("hostport"),
 		// GameSpy/qr2/qr2.c:63 (#define MAX_LOCAL_IP 5)
-		key::text("localip0"),
-		key::text("localip1"),
-		key::text("localip2"),
-		key::text("localip3"),
-		key::text("localip4"),
+		key::ipaddr("localip0"),
+		key::ipaddr("localip1"),
+		key::ipaddr("localip2"),
+		key::ipaddr("localip3"),
+		key::ipaddr("localip4"),
 		key::shrt("localport"),
-		key::byte("natneg"),
-		key::byte("statechanged"),
+		key::boolean("natneg"),
+		key::boolean("statechanged"),
 		// bf2 specific
-		key::byte("bf2_dedicated"),
-		key::byte("bf2_ranked"),
-		key::byte("bf2_anticheat"),
+		key::boolean("bf2_dedicated"),
+		key::boolean("bf2_ranked"),
+		key::boolean("bf2_anticheat"),
 		key::text("bf2_os"),
-		key::byte("bf2_autorec"),
+		key::boolean("bf2_autorec"),
 		key::text("bf2_d_idx"),
 		key::text("bf2_d_dl"),
-		key::byte("bf2_voip"),
-		key::byte("bf2_autobalanced"),
-		key::byte("bf2_friendlyfire"),
+		key::boolean("bf2_voip"),
+		key::boolean("bf2_autobalanced"),
+		key::boolean("bf2_friendlyfire"),
 		key::text("bf2_tkmode"),
 		key::real("bf2_startdelay"),
 		key::real("bf2_spawntime"),
@@ -95,17 +109,17 @@ const auto bf2Data = GameData{
 		key::real("bf2_teamratio"),
 		key::text("bf2_team1"),
 		key::text("bf2_team2"),
-		key::byte("bf2_bots"),
-		key::byte("bf2_pure"),
+		key::boolean("bf2_bots"),
+		key::boolean("bf2_pure"),
 		key::shrt("bf2_mapsize"),
-		key::byte("bf2_globalunlocks"),
+		key::boolean("bf2_globalunlocks"),
 		key::real("bf2_fps"),
-		key::byte("bf2_plasma"),
+		key::boolean("bf2_plasma"),
 		key::shrt("bf2_reservedslots"),
 		key::real("bf2_coopbotratio"),
 		key::shrt("bf2_coopbotcount"),
 		key::real("bf2_coopbotdiff"),
-		key::byte("bf2_novehicles")
+		key::boolean("bf2_novehicles")
 	}
 };
 
@@ -150,16 +164,18 @@ task<void> BF2::AddOrUpdateServer(IncomingServer& server)
 	co_await Game::AddOrUpdateServer(server);
 }
 
-task<std::vector<Game::SavedServer>> BF2::GetServers(const std::string_view& _query, const std::vector<std::string_view>& fields, std::size_t limit)
+task<std::vector<Game::SavedServer>> BF2::GetServers(const std::string_view& _query, const std::vector<std::string_view>& fields, std::size_t limit, std::size_t skip)
 {
 	std::string_view query = _query;
 	std::string copy;
+	// fix missing space before )gametype (happened when testing filtering with the bf2 client)
 	if (auto pos = query.find(")gametype"); pos != std::string_view::npos) {
 		copy.assign(query);
 		copy.insert(pos + 1, " ");
 		query = copy;
 	}
 
+	// fix unescaped single quotes in hostname queries
 	auto hostnameQuery = std::string_view{ "hostname like '%" };
 	if (auto pos = query.find(hostnameQuery); pos != std::string_view::npos) {
 		pos += hostnameQuery.size();
@@ -177,7 +193,7 @@ task<std::vector<Game::SavedServer>> BF2::GetServers(const std::string_view& _qu
 		}
 	}
 
-	auto servers = co_await Game::GetServers(query, fields, limit);
+	auto servers = co_await Game::GetServers(query, fields, limit, skip);
 	if (!m_Params)
 		co_return servers;
 

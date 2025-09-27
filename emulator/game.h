@@ -31,6 +31,10 @@ namespace gamespy {
 				as_real,
 				as_text
 			} store = Store::as_text;
+
+			std::string type;
+			std::string label;
+			std::string description;
 		};
 
 		std::string name;
@@ -98,7 +102,7 @@ namespace gamespy {
 		virtual task<void> Disconnect();
 
 		virtual task<void> AddOrUpdateServer(IncomingServer& server);
-		virtual task<std::vector<SavedServer>> GetServers(const std::string_view& query, const std::vector<std::string_view>& fields, std::size_t limit);
+		virtual task<std::vector<SavedServer>> GetServers(const std::string_view& query, const std::vector<std::string_view>& fields, std::size_t limit, std::size_t skip = 0);
 		virtual task<void> RemoveServers(const std::vector<std::pair<std::string_view, std::uint16_t>>& servers);
 
 		boost::signals2::signal<void(const IncomingServer&)> OnServerAdded;

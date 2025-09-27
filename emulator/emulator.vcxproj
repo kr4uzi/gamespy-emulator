@@ -175,6 +175,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="admin.h" />
     <ClInclude Include="asio.h" />
     <ClInclude Include="bf2.h" />
     <ClInclude Include="game.h" />
@@ -201,6 +202,7 @@
     <ClInclude Include="utils.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="admin.cpp" />
     <ClCompile Include="bf2.cpp" />
     <ClCompile Include="game.cpp" />
     <ClCompile Include="key.cpp" />

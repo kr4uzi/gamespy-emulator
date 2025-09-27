@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <string>
 #include <span>
+#include <boost/asio/experimental/coro.hpp>
 
 namespace gamespy {
 	class GameDB;
@@ -11,8 +12,6 @@ namespace gamespy {
 
 	class StatsClient {
 		boost::asio::ip::tcp::socket m_Socket;
-		std::string m_RecvBuffer;
-		std::string::size_type m_LastPacketSize = 0;
 
 		GameDB& m_GameDB;
 		PlayerDB& m_PlayerDB;
@@ -26,9 +25,7 @@ namespace gamespy {
 		boost::asio::awaitable<void> Process();
 
 	private:
-		boost::asio::awaitable<std::span<char>> ReceivePacket();
 		boost::asio::awaitable<void> SendPacket(std::string message);
-
-		boost::asio::awaitable<bool> Authenticate();
+		boost::asio::awaitable<bool> Authenticate(boost::asio::experimental::coro<std::span<char>>& reader);
 	};
 }

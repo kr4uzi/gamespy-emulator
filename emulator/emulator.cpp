@@ -8,6 +8,7 @@
 #include "ms.h"
 #include "key.h"
 #include "stats.h"
+#include "admin.h"
 #include "bf2.h"
 #include <print>
 #include <iostream>
@@ -55,6 +56,7 @@ task<void> Emulator::Launch(int argc, char* argv[])
 	// cd-key server doesn't need db support as we accept all keys
 	m_CDKeyServer = std::make_unique<CDKeyServer>(m_Context);
 	m_StatsServer = std::make_unique<StatsServer>(m_Context, *m_GameDB, *m_PlayerDB);
+	m_AdminServer = std::make_unique<AdminServer>(m_Context, *m_GameDB, *m_PlayerDB);
 
 	using namespace boost::asio::experimental::awaitable_operators;
 	auto wrap = [](const std::string_view& name, task<void>&& coro) -> task<void>
@@ -68,7 +70,6 @@ task<void> Emulator::Launch(int argc, char* argv[])
 		}
 	};
 
-
 	co_await (
 		wrap("master", m_MasterServer->Run())
 		&& wrap("login", m_LoginServer->AcceptClients())
@@ -76,6 +77,7 @@ task<void> Emulator::Launch(int argc, char* argv[])
 		&& wrap("browser", m_BrowserServer->AcceptClients())
 		&& wrap("cd-key", m_CDKeyServer->AcceptConnections())
 		&& wrap("stats", m_StatsServer->AcceptClients())
+		&& wrap("admin", m_AdminServer->AcceptClients())
 	);
 
 	co_await m_GameDB->Disconnect();

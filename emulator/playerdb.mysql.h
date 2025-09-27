@@ -3,7 +3,6 @@
 #define _GAMESPY_PLAYERDB_MYSQL_H_
 #include "playerdb.h"
 #include "asio.h"
-//#include <boost/asio/ssl.hpp>
 #include <boost/mysql.hpp>
 
 namespace gamespy {
