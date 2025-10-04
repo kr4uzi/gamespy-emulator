@@ -179,20 +179,16 @@ task<void> Emulator::InitAdminServer(int argc, char* argv[])
 	for (int i = 0; i < argc; i++) {
 		auto arg = std::string_view{ argv[i] };
 		if (arg.starts_with("-admin-user=")) {
-			username = arg;
+			username = arg.substr(12);
 		}
 		else if (arg.starts_with("-admin-password=")) {
-			password = arg;
+			password = arg.substr(16);
 		}
 		else if (arg.starts_with("-admin-disabled=true")) {
 			std::println("[admin] disabled");
 			co_return;
 		}
 	}
-
-	if (username.empty()) username = utils::random_string("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", 8);
-	if (password.empty()) password = utils::random_string("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", 12);
-
 
 	m_AdminServer = std::make_unique<AdminServer>(m_Context, *m_GameDB, *m_PlayerDB, username, password);
 	co_return;

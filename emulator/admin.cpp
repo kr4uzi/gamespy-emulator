@@ -256,8 +256,9 @@ public:
 		const auto& [error, length] = co_await http::async_read(m_Socket, buffer, request, net::as_tuple);
 		if (error) co_return;
 
+		// only host is allowed to bypass authentication
 		auto addr = m_Socket.remote_endpoint().address();
-		if (!addr.is_loopback()) {
+		if (!addr.is_loopback() && addr != m_Socket.local_endpoint().address()) {
 			auto auth = request.find(http::field::authorization);
 			if (auth == request.end() || auth->value() != m_Auth) {
 				std::println("[admin] unauthorized access attempt from {}", addr.to_string());
@@ -270,6 +271,8 @@ public:
 				co_await http::async_write(m_Socket, response, boost::asio::use_awaitable);
 				co_return;
 			}
+
+			std::println("[admin] authorized access from {}", addr.to_string());
 		}
 
 		auto uri = boost::urls::parse_origin_form(request.target());
@@ -284,9 +287,20 @@ public:
 };
 
 AdminServer::AdminServer(boost::asio::io_context& context, GameDB& gameDB, PlayerDB& playerDB, const std::string& username, const std::string& password, boost::asio::ip::port_type port)
-	: m_Acceptor(context, tcp::endpoint(tcp::v6(), port)), m_GameDB(gameDB), m_PlayerDB(playerDB), m_Auth("Basic " + utils::base64_encode(std::format("{}:{}", username, password)))
+	: m_Acceptor(context, tcp::v6()), m_GameDB(gameDB), m_PlayerDB(playerDB)
 {
-	std::println("[admin] listening on port {}, username={}, password={}", port, username, password);
+	m_Acceptor.set_option(tcp::acceptor::reuse_address(true));
+	if (username.empty() || password.empty()) {
+		m_Acceptor.bind(tcp::endpoint(boost::asio::ip::make_address("::1"), port));
+		std::println("[admin] listening on port {} (loopback only, no authentication)", port);
+	}
+	else {
+		m_Auth = "Basic " + utils::base64_encode(std::format("{}:{}", username, password));
+		m_Acceptor.bind(tcp::endpoint(tcp::v6(), port));
+		std::println("[admin] listening on port {}, username={}, password={}", port, username, password);
+	}
+
+	m_Acceptor.listen();
 }
 
 AdminServer::~AdminServer()
