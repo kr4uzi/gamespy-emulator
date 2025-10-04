@@ -282,7 +282,7 @@
                     input.step = "any";
                 } else if (k.type == "boolean") {
                     input.type = "checkbox";
-                    if (server && server[k.name]) {
+                    if (server && server[k.name] == '1') {
                         input.value = 'on';
                         input.checked = true;
                     }
@@ -339,7 +339,7 @@
                     if (el.name && el.name in currentGame.nameToKey) {
                         const type = currentGame.nameToKey[el.name].type || 'text';
                         if (type == 'boolean') {
-                            params.append(el.name, el.value == 'on' ? '1' : '0');
+                            params.append(el.name, el.checked ? '1' : '0');
                         } else {
                             params.append(el.name, el.value);
                         }
