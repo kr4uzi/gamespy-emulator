@@ -10,6 +10,7 @@
 #include "stats.h"
 #include "admin.h"
 #include "bf2.h"
+#include "utils.h"
 #include <print>
 #include <iostream>
 #include <fstream>
@@ -42,12 +43,15 @@ task<void> Emulator::Launch(int argc, char* argv[])
 			std::println("-playerdb-username       : mysql username for player database");
 			std::println("-playerdb-password       : the user's password");
 			std::println("-playerdb-database       : the database name for the player database");
+			std::println("-admin-user              : the username for the admin server (when remote)");
+			std::println("-admin-password          : the password for the admin server (when remote)");
 			co_return;
 		}
 	}
 
 	co_await InitGameDB(argc, argv);
 	co_await InitPlayerDB(argc, argv);
+	co_await InitAdminServer(argc, argv);
 
 	m_MasterServer = std::make_unique<MasterServer>(m_Context, *m_GameDB);
 	m_LoginServer = std::make_unique<LoginServer>(m_Context, *m_GameDB, *m_PlayerDB);
@@ -56,7 +60,6 @@ task<void> Emulator::Launch(int argc, char* argv[])
 	// cd-key server doesn't need db support as we accept all keys
 	m_CDKeyServer = std::make_unique<CDKeyServer>(m_Context);
 	m_StatsServer = std::make_unique<StatsServer>(m_Context, *m_GameDB, *m_PlayerDB);
-	m_AdminServer = std::make_unique<AdminServer>(m_Context, *m_GameDB, *m_PlayerDB);
 
 	using namespace boost::asio::experimental::awaitable_operators;
 	auto wrap = [](const std::string_view& name, task<void>&& coro) -> task<void>
@@ -167,4 +170,30 @@ task<void> Emulator::InitPlayerDB(int argc, char* argv[])
 	}
 
 	co_await m_PlayerDB->Connect();
+}
+
+task<void> Emulator::InitAdminServer(int argc, char* argv[])
+{
+	std::string username;
+	std::string password;
+	for (int i = 0; i < argc; i++) {
+		auto arg = std::string_view{ argv[i] };
+		if (arg.starts_with("-admin-user=")) {
+			username = arg;
+		}
+		else if (arg.starts_with("-admin-password=")) {
+			password = arg;
+		}
+		else if (arg.starts_with("-admin-disabled=true")) {
+			std::println("[admin] disabled");
+			co_return;
+		}
+	}
+
+	if (username.empty()) username = utils::random_string("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", 8);
+	if (password.empty()) password = utils::random_string("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", 12);
+
+
+	m_AdminServer = std::make_unique<AdminServer>(m_Context, *m_GameDB, *m_PlayerDB, username, password);
+	co_return;
 }

@@ -17,6 +17,8 @@ namespace gamespy {
 	namespace utils {
 		std::string random_string(const std::string& table, std::string::size_type len);
 
+		std::string base64_encode(const std::string& data);
+		std::string base64_decode(const std::string& data);
 		std::string encode(const std::string_view& passphrase, std::string message);
 		std::string passencode(const std::string& password);
 		std::string passdecode(std::string password);

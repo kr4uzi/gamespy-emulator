@@ -25,22 +25,6 @@ namespace {
 		return T{ seed_seq };
 	}
 
-	//http://stackoverflow.com/a/28471421
-	std::string base64_decode(const std::string& data) {
-		using namespace boost::archive::iterators;
-		using It = transform_width<binary_from_base64<std::string::const_iterator>, 8, 6>;
-		return boost::algorithm::trim_right_copy_if(std::string(It(std::begin(data)), It(std::end(data))), [](char c) {
-			return c == '\0';
-		});
-	}
-
-	std::string base64_encode(const std::string& data) {
-		using namespace boost::archive::iterators;
-		using It = base64_from_binary<transform_width<std::string::const_iterator, 6, 8>>;
-		auto tmp = std::string(It(std::begin(data)), It(std::end(data)));
-		return tmp.append((3 - data.size() % 3) % 3, '=');
-	}
-
 	std::string gspassenc(const std::string& password) {
 		auto rnd = std::minstd_rand0{ 0x79707367 }; // "gspy"
 
@@ -50,6 +34,22 @@ namespace {
 
 		return encoded;
 	}
+}
+
+std::string utils::base64_encode(const std::string& data) {
+	using namespace boost::archive::iterators;
+	using It = base64_from_binary<transform_width<std::string::const_iterator, 6, 8>>;
+	auto tmp = std::string(It(std::begin(data)), It(std::end(data)));
+	return tmp.append((3 - data.size() % 3) % 3, '=');
+}
+
+//http://stackoverflow.com/a/28471421
+std::string utils::base64_decode(const std::string& data) {
+	using namespace boost::archive::iterators;
+	using It = transform_width<binary_from_base64<std::string::const_iterator>, 8, 6>;
+	return boost::algorithm::trim_right_copy_if(std::string(It(std::begin(data)), It(std::end(data))), [](char c) {
+		return c == '\0';
+	});
 }
 
 std::string utils::random_string(const std::string& table, std::string::size_type len)

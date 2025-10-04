@@ -38,6 +38,7 @@ namespace gamespy
 	private:
 		task<void> InitGameDB(int argc, char* argv[]);
 		task<void> InitPlayerDB(int argc, char* argv[]);
+		task<void> InitAdminServer(int argc, char* argv[]);
 	};
 }
 

@@ -70,10 +70,11 @@ class AdminClient
 	tcp::socket m_Socket;
 	GameDB& m_GameDB;
 	PlayerDB& m_PlayerDB;
+	std::string_view m_Auth;
 
 public:
-	AdminClient(tcp::socket socket, GameDB& gameDB, PlayerDB &playerDB)
-		: m_Socket(std::move(socket)), m_GameDB(gameDB), m_PlayerDB(playerDB)
+	AdminClient(tcp::socket socket, GameDB& gameDB, PlayerDB &playerDB, std::string_view auth)
+		: m_Socket(std::move(socket)), m_GameDB(gameDB), m_PlayerDB(playerDB), m_Auth(auth)
 	{
 
 	}
@@ -255,6 +256,22 @@ public:
 		const auto& [error, length] = co_await http::async_read(m_Socket, buffer, request, net::as_tuple);
 		if (error) co_return;
 
+		auto addr = m_Socket.remote_endpoint().address();
+		if (!addr.is_loopback()) {
+			auto auth = request.find(http::field::authorization);
+			if (auth == request.end() || auth->value() != m_Auth) {
+				std::println("[admin] unauthorized access attempt from {}", addr.to_string());
+				auto response = http::response<http::string_body>{};
+				response.result(http::status::unauthorized);
+				response.set(http::field::www_authenticate, "Basic realm=\"Authentication required\"");
+				response.set(http::field::server, BOOST_BEAST_VERSION_STRING);
+				response.version(request.version());
+				response.keep_alive(false);
+				co_await http::async_write(m_Socket, response, boost::asio::use_awaitable);
+				co_return;
+			}
+		}
+
 		auto uri = boost::urls::parse_origin_form(request.target());
 		auto path = uri->path();
 		auto params = uri->params();
@@ -266,10 +283,10 @@ public:
 	}
 };
 
-AdminServer::AdminServer(boost::asio::io_context& context, GameDB& gameDB, PlayerDB& playerDB, boost::asio::ip::port_type port)
-	: m_Acceptor(context, tcp::endpoint(boost::asio::ip::make_address("::1"), port)), m_GameDB(gameDB), m_PlayerDB(playerDB)
+AdminServer::AdminServer(boost::asio::io_context& context, GameDB& gameDB, PlayerDB& playerDB, const std::string& username, const std::string& password, boost::asio::ip::port_type port)
+	: m_Acceptor(context, tcp::endpoint(tcp::v6(), port)), m_GameDB(gameDB), m_PlayerDB(playerDB), m_Auth("Basic " + utils::base64_encode(std::format("{}:{}", username, password)))
 {
-	std::println("[admin] listening on port {}", port);
+	std::println("[admin] listening on port {}, username={}, password={}", port, username, password);
 }
 
 AdminServer::~AdminServer()
@@ -291,7 +308,7 @@ boost::asio::awaitable<void> AdminServer::AcceptClients()
 boost::asio::awaitable<void> AdminServer::HandleIncoming(boost::asio::ip::tcp::socket socket)
 {
 	try {
-		auto client = AdminClient{ std::move(socket), m_GameDB, m_PlayerDB };
+		auto client = AdminClient{ std::move(socket), m_GameDB, m_PlayerDB, m_Auth };
 		co_await client.Run();
 	}
 	catch (const std::exception& e) {
