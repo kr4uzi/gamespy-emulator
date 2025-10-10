@@ -168,10 +168,12 @@ task<std::vector<Game::SavedServer>> BF2::GetServers(const std::string_view& _qu
 {
 	std::string_view query = _query;
 	std::string copy;
-	// fix missing space before )gametype (happened when testing filtering with the bf2 client)
-	if (auto pos = query.find(")gametype"); pos != std::string_view::npos) {
+
+	// remove all filters, "update server list", check any settings, "update server list"
+	// => the gametype selection will be concatenated to rest of the query, e.g. bf2_ranked = 1gametype like '%gpcm_cq%'
+	if (auto pos = query.find("gametype"); pos != std::string_view::npos && pos > 0 && query[pos - 1] != ' ') {
 		copy.assign(query);
-		copy.insert(pos + 1, " ");
+		copy.insert(pos, " and ");
 		query = copy;
 	}
 
@@ -194,7 +196,7 @@ task<std::vector<Game::SavedServer>> BF2::GetServers(const std::string_view& _qu
 	}
 
 	auto servers = co_await Game::GetServers(query, fields, limit, skip);
-	if (!m_Params)
+	if (!m_Params || servers.size() == 0)
 		co_return servers;
 
 	auto stmt = co_await m_Conn.async_prepare_statement(R"(

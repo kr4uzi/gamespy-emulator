@@ -251,13 +251,22 @@ public:
 
 	net::awaitable<void> Run()
 	{
+		auto addr = m_Socket.remote_endpoint().address();
+
+		// there should not be no operation taking longer than 10 seconds
+		auto timeout = boost::asio::system_timer{ m_Socket.get_executor(), std::chrono::seconds(10) };
+		timeout.async_wait([&](const auto& ec) {
+			if (ec) return;
+			std::println("[admin] connection {} timed out", addr.to_string());
+			m_Socket.close();
+		});
+
 		auto buffer = beast::flat_buffer{ 8192 };
 		auto request = http::request<http::dynamic_body>{};
 		const auto& [error, length] = co_await http::async_read(m_Socket, buffer, request, net::as_tuple);
 		if (error) co_return;
 
-		// only host is allowed to bypass authentication
-		auto addr = m_Socket.remote_endpoint().address();
+		// only host itself is allowed to bypass authentication
 		if (!addr.is_loopback() && addr != m_Socket.local_endpoint().address()) {
 			auto auth = request.find(http::field::authorization);
 			if (auth == request.end() || auth->value() != m_Auth) {

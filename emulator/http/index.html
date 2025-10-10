@@ -199,7 +199,7 @@
         }
 
         async function loadServers(game) {
-            const res = await fetch(`/api/servers?game=${encodeURIComponent(game.name)}&fields=${encodeURIComponent(game.shownFields.join(','))}`);
+            const res = await fetch(`/api/servers?game=${encodeURIComponent(game.name)}&fields=${encodeURIComponent(game.keys.map(k => k.name).join(','))}`);
             const servers = await res.json();
             renderTable(game, servers);
         }
