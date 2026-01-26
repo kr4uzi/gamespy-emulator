@@ -6,6 +6,7 @@
 #include "asio.h"
 #include <boost/mysql.hpp>
 #include <optional>
+#include <string_view>
 
 namespace gamespy
 {

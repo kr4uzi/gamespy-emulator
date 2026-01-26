@@ -39,7 +39,9 @@ boost::asio::awaitable<void> MasterServer::Cleanup()
 				if (timeSinceLastUpdate > std::chrono::seconds{ 60 }) {
 					std::println("[master][server][{}] {}:{} timed out", i->second.gamename, i->first.address().to_string(), i->first.port());
 					auto game = co_await m_DB.GetGame(i->second.gamename);
-					co_await game->RemoveServers({ std::make_pair(i->first.address().to_string(), i->first.port()) });
+					// not pusing into a outer vector because the remove servers expects a string_view which would be dangling after this iteration
+					auto addr = i->first.address().to_string();
+					co_await game->RemoveServers({ std::make_pair(addr, i->first.port()) });
 					i = servers->erase(i);
 				}
 				else
@@ -55,7 +57,7 @@ boost::asio::awaitable<void> MasterServer::HandleAvailable(const udp::endpoint& 
 	// this package is sent by clients and server to check if the gamespy endpoint is running
 	// the response contains a 32-bit status flag which containts only 3 possible status: 0 = available, 1 = unavailable, 2 = temporarily unavailable
 	// sample package: 0x09 0x00 0x00 0x00 0x00 0x62 0x61 0x74 0x74 0x6C 0x65 0x66 0x69 0x65 0x6C 0x64 0x32 0x00
-	//                     |   INSTANCE KEY   |  b    a    t    t    l    e    f    i    e    l    d    2  |
+	//                      |  INSTANCE KEY   |  b    a    t    t    l    e    f    i    e    l    d    2      |
 	auto name = std::string_view{ reinterpret_cast<const char*>(packet.data.data()), packet.data.size() - 1 };
 	if (co_await m_DB.HasGame(name)) {
 		auto game = co_await m_DB.GetGame(name);

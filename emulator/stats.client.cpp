@@ -6,7 +6,13 @@
 #include <print>
 #include <ctime>
 #include <sstream>
+#include <boost/beast/core.hpp>
+#include <boost/beast/http.hpp>
 using namespace gamespy;
+namespace beast = boost::beast;
+namespace http = beast::http;
+namespace net = boost::asio;
+using tcp = boost::asio::ip::tcp;
 
 namespace {
 	// functions taken from the GameSpy SDK (gstats/gstats.c) and modified to use modern c++
@@ -38,8 +44,8 @@ namespace {
 	boost::asio::experimental::coro<std::span<char>> packet_reader(boost::asio::ip::tcp::socket& sock)
 	{
 		constexpr auto packetEnd = std::string_view{ "\\final\\" };
+		std::string buffer;
 		while (sock.is_open()) {
-			std::string buffer;
 			const auto& [error, length] = co_await boost::asio::async_read_until(sock, boost::asio::dynamic_buffer(buffer), packetEnd, boost::asio::as_tuple);
 			if (error) break;
 
@@ -52,8 +58,8 @@ namespace {
 	}
 }
 
-StatsClient::StatsClient(boost::asio::ip::tcp::socket socket, GameDB& gameDB, PlayerDB& playerDB)
-	: m_Socket(std::move(socket)), m_GameDB(gameDB), m_PlayerDB(playerDB), m_SessionKey(0)
+StatsClient::StatsClient(boost::asio::ip::tcp::socket socket, GameDB& gameDB, PlayerDB& playerDB, const std::optional<boost::asio::ip::tcp::endpoint>& snapshotEndpoint)
+	: m_Socket(std::move(socket)), m_GameDB(gameDB), m_PlayerDB(playerDB), m_SessionKey(0), m_SnapshotEndpoint(snapshotEndpoint)
 {
 
 }
@@ -62,21 +68,6 @@ StatsClient::~StatsClient()
 {
 
 }
-
-#if 0
-boost::asio::awaitable<std::span<char>> StatsClient::ReceivePacket()
-{
-	m_RecvBuffer.erase(0, m_LastPacketSize);
-	auto packetEnd = std::string_view{"\\final\\"};
-	const auto& [error, length] = co_await boost::asio::async_read_until(m_Socket, boost::asio::dynamic_buffer(m_RecvBuffer), packetEnd, boost::asio::as_tuple(boost::asio::use_awaitable));
-	if (error) co_return std::span<char>{};
-
-	auto encoded = std::span(m_RecvBuffer.data(), length - packetEnd.size());
-	utils::gs_xor(encoded, utils::xor_types::GameSpy3D);
-	m_LastPacketSize = length;
-	co_return std::span(m_RecvBuffer.data(), length);
-}
-#endif
 
 boost::asio::awaitable<void> StatsClient::SendPacket(std::string message)
 {
@@ -147,7 +138,8 @@ boost::asio::awaitable<void> StatsClient::Process()
 			auto gamedata = utils::value_for_key<std::string>(_packet, "\\gamedata\\");
 			if (gamedata) {
 				std::replace(gamedata->begin(), gamedata->end(), '\x1', '\\');
-				std::println("[stats] {}", packet);
+				auto done = utils::value_for_key<std::uint32_t>(_packet, "\\done\\");
+				co_await HandeSnapshot(*gamedata, done && *done == 1);
 			}
 
 			// "\updgame\\sesskey\%d\done\%d\gamedata\%s"
@@ -157,6 +149,9 @@ boost::asio::awaitable<void> StatsClient::Process()
 		else if (packet.starts_with("\\newgame\\")) {
 			// "\newgame\\connid\%d\sesskey\%d"
 			// "\newgame\\sesskey\%d\challenge\%d"
+			//std::println("[stats] {}", packet);
+		}
+		else {
 			std::println("[stats] {}", packet);
 		}
 	}
@@ -201,4 +196,31 @@ boost::asio::awaitable<bool> StatsClient::Authenticate(boost::asio::experimental
 
 	co_await SendPacket(std::format(R"(\lc\2\sesskey\{}\proof\0\id\1)", m_SessionKey));
 	co_return true;
+}
+
+boost::asio::awaitable<void> StatsClient::HandeSnapshot(const std::string_view& data, bool final)
+{
+	if (!m_SnapshotEndpoint) {
+		std::println("[stats] snapshot endpoint not configured, skipping snapshot upload");
+		co_return;
+	}
+
+	beast::tcp_stream stream(m_Socket.get_executor());
+	co_await stream.async_connect(*m_SnapshotEndpoint, net::use_awaitable);
+
+	auto req = http::request<http::string_body>{ http::verb::post, "/ASP/bf2statistics.php", 10 };
+	req.set(http::field::user_agent, "GameSpyHTTP/1.0");
+	// note: originaly, bf2 used "application/x-www-form-urlencoded",
+	// but the data is actually json, so we use the correct content-type here
+	req.set(http::field::content_type, "application/json");
+	req.set(http::field::connection, "close");
+	req.body() = data;
+	req.prepare_payload();
+	co_await http::async_write(stream, req, net::use_awaitable);
+
+	beast::flat_buffer buffer;
+	http::response<http::string_body> res;
+	co_await http::async_read(stream, buffer, res, net::use_awaitable);
+
+	std::println("[stats] snapshot processed");
 }

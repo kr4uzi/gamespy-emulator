@@ -89,7 +89,6 @@ public:
 		auto response = http::response<http::string_body>{};
 		response.result(status);
 		response.version(request.version());
-		response.set(http::field::server, BOOST_BEAST_VERSION_STRING);
 		response.keep_alive(false);
 		if (body) {
 			response.set(http::field::content_type, "application/json");
@@ -241,7 +240,6 @@ public:
 			std::make_tuple(std::move(body)),
 			std::make_tuple(http::status::ok, request.version())
 		};
-		res.set(http::field::server, BOOST_BEAST_VERSION_STRING);
 		res.set(http::field::content_type, ::mimeType(filePath.string()));
 		res.content_length(size);
 		res.keep_alive(false);
@@ -274,7 +272,6 @@ public:
 				auto response = http::response<http::string_body>{};
 				response.result(http::status::unauthorized);
 				response.set(http::field::www_authenticate, "Basic realm=\"Authentication required\"");
-				response.set(http::field::server, BOOST_BEAST_VERSION_STRING);
 				response.version(request.version());
 				response.keep_alive(false);
 				co_await http::async_write(m_Socket, response, boost::asio::use_awaitable);
@@ -306,7 +303,7 @@ AdminServer::AdminServer(boost::asio::io_context& context, GameDB& gameDB, Playe
 	else {
 		m_Auth = "Basic " + utils::base64_encode(std::format("{}:{}", username, password));
 		m_Acceptor.bind(tcp::endpoint(tcp::v6(), port));
-		std::println("[admin] listening on port {}, username={}, password={}", port, username, password);
+		std::println("[admin] listening on port {}, username={}, password={} (internet)", port, username, password);
 	}
 
 	m_Acceptor.listen();

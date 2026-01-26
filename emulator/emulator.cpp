@@ -43,8 +43,19 @@ task<void> Emulator::Launch(int argc, char* argv[])
 			std::println("-playerdb-username       : mysql username for player database");
 			std::println("-playerdb-password       : the user's password");
 			std::println("-playerdb-database       : the database name for the player database");
-			std::println("-admin-user              : the username for the admin server (when remote)");
-			std::println("-admin-password          : the password for the admin server (when remote)");
+			std::println();
+			std::println("Stats server options:");
+			std::println("-stats-host              : the snapshot server host (bf2stats)");
+			std::println("-stats-port              : the snapshot server host port (bf2stats)");
+			std::println("Note: This is currently an experimental feature with a hardcoded endpoint:");
+			std::println("http://<stats-host>:<stats-port>/ASP/bf2statistics.php");
+			std::println();
+			std::println("Admin server options:");
+			std::println("-admin-user              : the username for the admin server (remote)");
+			std::println("-admin-password          : the password for the admin server (remote)");
+			std::println("[-admin-disabled]        : disables the admin server");
+			std::println("The Admin server is enabled by default on localhost only.");
+			std::println("Username and password is - if empty remote access is disabled");
 			co_return;
 		}
 	}
@@ -52,6 +63,7 @@ task<void> Emulator::Launch(int argc, char* argv[])
 	co_await InitGameDB(argc, argv);
 	co_await InitPlayerDB(argc, argv);
 	co_await InitAdminServer(argc, argv);
+	co_await InitStatsServer(argc, argv);
 
 	m_MasterServer = std::make_unique<MasterServer>(m_Context, *m_GameDB);
 	m_LoginServer = std::make_unique<LoginServer>(m_Context, *m_GameDB, *m_PlayerDB);
@@ -59,7 +71,6 @@ task<void> Emulator::Launch(int argc, char* argv[])
 	m_BrowserServer = std::make_unique<BrowserServer>(m_Context, *m_GameDB);
 	// cd-key server doesn't need db support as we accept all keys
 	m_CDKeyServer = std::make_unique<CDKeyServer>(m_Context);
-	m_StatsServer = std::make_unique<StatsServer>(m_Context, *m_GameDB, *m_PlayerDB);
 
 	using namespace boost::asio::experimental::awaitable_operators;
 	auto wrap = [](const std::string_view& name, task<void>&& coro) -> task<void>
@@ -191,5 +202,29 @@ task<void> Emulator::InitAdminServer(int argc, char* argv[])
 	}
 
 	m_AdminServer = std::make_unique<AdminServer>(m_Context, *m_GameDB, *m_PlayerDB, username, password);
+	co_return;
+}
+
+task<void> Emulator::InitStatsServer(int argc, char* argv[])
+{
+	std::string host;
+	std::optional<std::uint16_t> port;
+
+	for (int i = 0; i < argc; i++) {
+		auto arg = std::string_view{ argv[i] };
+		if (arg.starts_with("-stats-host="))
+			host = arg.substr(12);
+		else if (arg.starts_with("-stats-port="))
+			port = std::atoi(arg.substr(12).data());
+	}
+
+	std::optional<boost::asio::ip::tcp::endpoint> snapshotEndpoint;
+	if (host.empty() && port) host = "127.0.0.1";
+	else if (!host.empty() && !port) port = 80;
+	
+	if (!host.empty() && port)
+		snapshotEndpoint = boost::asio::ip::tcp::endpoint(boost::asio::ip::make_address(host), *port);
+
+	m_StatsServer = std::make_unique<StatsServer>(m_Context, *m_GameDB, *m_PlayerDB, snapshotEndpoint);
 	co_return;
 }

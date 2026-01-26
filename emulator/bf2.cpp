@@ -2,6 +2,8 @@
 #include <print>
 #include <algorithm>
 using namespace gamespy;
+namespace net = boost::asio;
+using tcp = net::ip::tcp;
 using Send = GameData::GameKey::Send;
 using Store = GameData::GameKey::Store;
 
@@ -123,13 +125,13 @@ const auto bf2Data = GameData{
 	}
 };
 
-BF2::BF2(boost::asio::io_context& context)
+BF2::BF2(net::io_context& context)
 	: Game{ bf2Data }, m_Conn{ context }
 {
 
 }
 
-BF2::BF2(boost::asio::io_context& context, boost::mysql::connect_params params)
+BF2::BF2(net::io_context& context, boost::mysql::connect_params params)
 	: Game{ bf2Data }, m_Conn{ context }, m_Params(std::move(params))
 {
 
@@ -155,7 +157,7 @@ task<void> BF2::Connect()
 
 task<void> BF2::Disconnect()
 {
-	co_await m_Conn.async_close(boost::asio::use_awaitable);
+	co_await m_Conn.async_close(net::use_awaitable);
 }
 
 task<void> BF2::AddOrUpdateServer(IncomingServer& server)
@@ -207,10 +209,10 @@ task<std::vector<Game::SavedServer>> BF2::GetServers(const std::string_view& _qu
 		FROM server
 		JOIN stats_provider ON stats_provider.id = server.provider_id
 		WHERE stats_provider.authorized = 1
-	)", boost::asio::use_awaitable);
+	)", net::use_awaitable);
 
 	boost::mysql::results result;
-	co_await m_Conn.async_execute(stmt.bind(), result, boost::asio::use_awaitable);
+	co_await m_Conn.async_execute(stmt.bind(), result, net::use_awaitable);
 	auto rankedServers = std::map<std::pair<std::string, std::uint16_t>, bool>{};
 	for (const auto& row : result.rows()) {
 		auto conn = std::make_pair(row.at(0).as_string(), static_cast<std::uint16_t>(row.at(1).as_uint64()));

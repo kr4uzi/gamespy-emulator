@@ -3,10 +3,10 @@ GameSpy Server Emulator
 - sqlite3 and mysql database support
 - server browsing
 - stats endpoint
+- native support for bf2 (enables official ranking system)
 
-GameSpy Redirector
-- redirect all calls to localhost
-- fix the long startup process
+Usage:
+Use the -help flag to see all available options
 
 Other resources:
 - BF2 Statistics (weapon unlocks)
