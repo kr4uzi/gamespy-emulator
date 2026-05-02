@@ -1,6 +1,7 @@
 GameSpy Server Emulator
 - login + retrieve profile
 - sqlite3 and mysql database support
+- mysql support via command line args: -playerdb-host=localhost -playerdb-username=bf2stats -playerdb-password=bf2stats -playerdb-database=bf2stats
 - server browsing
 - stats endpoint
 
