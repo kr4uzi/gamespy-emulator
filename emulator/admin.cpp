@@ -99,7 +99,7 @@ public:
 		co_await http::async_write(m_Socket, response, boost::asio::use_awaitable);
 	}
 
-	net::awaitable<bool> HandleAPI(const http::request<http::dynamic_body>& request, const boost::urls::string_view& path, const boost::urls::params_view& params)
+	net::awaitable<bool> HandleAPI(const http::request<http::dynamic_body>& request, const boost::core::string_view& path, const boost::urls::params_view& params)
 	{
 		auto method = request.method();
 		if (path == "/api/games") {

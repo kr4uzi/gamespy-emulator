@@ -56,6 +56,8 @@ namespace gamespy {
 
 		std::uint32_t to_date(const Clock::time_point& timepoint);
 		Clock::time_point from_date(std::uint32_t gsDate);
+
+		std::optional<std::uint32_t> parse_uint32(const std::string_view& str);
 	}
 }
 

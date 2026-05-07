@@ -11,6 +11,7 @@
 #include "admin.h"
 #include "bf2.h"
 #include "utils.h"
+#include "http.h"
 #include <print>
 #include <iostream>
 #include <fstream>
@@ -43,8 +44,13 @@ task<void> Emulator::Launch(int argc, char* argv[])
 			std::println("-playerdb-username       : mysql username for player database");
 			std::println("-playerdb-password       : the user's password");
 			std::println("-playerdb-database       : the database name for the player database");
+			std::println();
 			std::println("-admin-user              : the username for the admin server (when remote)");
 			std::println("-admin-password          : the password for the admin server (when remote)");
+			std::println("-admin-disabled=true     : disable the admin server (default: false)");
+			std::println("Note: If no user and password is provided, the admin server will only be accessible from localhost");
+			std::println();
+			std::println("-http-enabled=true       : enable the builtin (bf2) http server (default: false)");
 			co_return;
 		}
 	}
@@ -52,6 +58,7 @@ task<void> Emulator::Launch(int argc, char* argv[])
 	co_await InitGameDB(argc, argv);
 	co_await InitPlayerDB(argc, argv);
 	co_await InitAdminServer(argc, argv);
+	co_await InitHttpServer(argc, argv);
 
 	m_MasterServer = std::make_unique<MasterServer>(m_Context, *m_GameDB);
 	m_LoginServer = std::make_unique<LoginServer>(m_Context, *m_GameDB, *m_PlayerDB);
@@ -73,6 +80,8 @@ task<void> Emulator::Launch(int argc, char* argv[])
 		}
 	};
 
+	auto noop = []() -> task<void> { co_return; };
+
 	co_await (
 		wrap("master", m_MasterServer->Run())
 		&& wrap("login", m_LoginServer->AcceptClients())
@@ -80,7 +89,8 @@ task<void> Emulator::Launch(int argc, char* argv[])
 		&& wrap("browser", m_BrowserServer->AcceptClients())
 		&& wrap("cd-key", m_CDKeyServer->AcceptConnections())
 		&& wrap("stats", m_StatsServer->AcceptClients())
-		&& wrap("admin", m_AdminServer->AcceptClients())
+		&& wrap("admin", m_AdminServer ? m_AdminServer->AcceptClients() : noop())
+		&& wrap("http", m_HttpServer ? m_HttpServer->AcceptClients() : noop())
 	);
 
 	co_await m_GameDB->Disconnect();
@@ -191,5 +201,19 @@ task<void> Emulator::InitAdminServer(int argc, char* argv[])
 	}
 
 	m_AdminServer = std::make_unique<AdminServer>(m_Context, *m_GameDB, *m_PlayerDB, username, password);
+	co_return;
+}
+
+task<void> Emulator::InitHttpServer(int argc, char* argv[])
+{
+	for (int i = 0; i < argc; i++) {
+		auto arg = std::string_view{ argv[i] };
+		if (arg == "-http-enabled=true") {
+			m_HttpServer = std::make_unique<HttpServer>(m_Context, *m_GameDB, *m_PlayerDB);
+			std::println("[http] enabled");
+			break;
+		}
+	}
+
 	co_return;
 }

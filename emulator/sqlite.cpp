@@ -186,7 +186,7 @@ void sqlite::stmt::bind_at(std::size_t pos, const std::string& str)
 		throw std::length_error{ "string too large to bind" };
 
 	auto stmt = reinterpret_cast<sqlite3_stmt*>(m_Stmt.get());
-	int ec = sqlite3_bind_text(stmt, static_cast<int>(pos), str.data(), static_cast<int>(str.length()), SQLITE_STATIC);
+	int ec = sqlite3_bind_text(stmt, static_cast<int>(pos), str.data(), static_cast<int>(str.length()), SQLITE_TRANSIENT);
 	if (ec != SQLITE_OK)
 		throw std::runtime_error{ "Failed to bind text" };
 }
@@ -200,7 +200,7 @@ void sqlite::stmt::bind_at(std::size_t pos, const std::string_view& str)
 		throw std::length_error{ "string too large to bind" };
 
 	auto stmt = reinterpret_cast<sqlite3_stmt*>(m_Stmt.get());
-	int ec = sqlite3_bind_text(stmt, static_cast<int>(pos), str.data(), static_cast<int>(str.length()), SQLITE_STATIC);
+	int ec = sqlite3_bind_text(stmt, static_cast<int>(pos), str.data(), static_cast<int>(str.length()), SQLITE_TRANSIENT);
 	if (ec != SQLITE_OK)
 		throw std::runtime_error{ "Failed to bind text" };
 }

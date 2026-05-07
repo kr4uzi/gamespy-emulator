@@ -191,3 +191,14 @@ Clock::time_point utils::from_date(std::uint32_t gsDate)
 
 	return std::chrono::sys_days{ ymd };
 }
+
+std::optional<std::uint32_t> utils::parse_uint32(const std::string_view& str)
+{
+	std::uint32_t result;
+	auto end = str.data() + str.size();
+	auto [ptr, ec] = std::from_chars(str.data(), end, result);
+	if (ec != std::errc{} || ptr != end)
+		return std::nullopt;
+
+	return result;
+}

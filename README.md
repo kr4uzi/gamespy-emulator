@@ -21,9 +21,11 @@ Battlefield 2:
 - edit and use the start_bf2.bat to make your client connect to a configurable gamespy server
 
 Developing:
-Windows: execute the configure.bat, then open the .sln and build the solution using the Visual Studio GUI
+Windows: execute the configure.ps1, then open the .sln and build the solution using the Visual Studio GUI
 
-Linux:
+Note: The configure.ps1 is used mainly to initialize the dependencies and build Microsoft Detours (required for the redirector).
+
+Linux:\
 - if you want dependencies to be handled by vcpkg:
 ```shell
 git clone https://github.com/microsoft/vcpkg.git
@@ -33,8 +35,18 @@ cd vcpkg
 
 - build the emulator
 ```bash
-./configure.sh
+sudo apt install build-essential g++ cmake pkg-config
+git submodule update --init --recursive --depth 1
 cd emulator
 cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE=~/source/vcpkg/scripts/buildsystems/vcpkg.cmake -DCMAKE_CXX_COMPILER=/usr/local/bin/g++
+cmake --build build
+```
+
+MacOS:\
+```bash
+brew install gcc
+export CXX=g++-15
+export CC=gcc-15
+cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE=~/Source/vcpkg/scripts/buildsystems/vcpkg.cmake
 cmake --build build
 ```
