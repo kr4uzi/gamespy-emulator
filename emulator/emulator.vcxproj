@@ -178,7 +178,10 @@
     <ClInclude Include="admin.h" />
     <ClInclude Include="asio.h" />
     <ClInclude Include="bf2.h" />
+    <ClInclude Include="bf2web.h" />
     <ClInclude Include="game.h" />
+    <ClInclude Include="http.client.h" />
+    <ClInclude Include="http.h" />
     <ClInclude Include="key.h" />
     <ClInclude Include="playerdb.h" />
     <ClInclude Include="playerdb.mysql.h" />
@@ -204,7 +207,10 @@
   <ItemGroup>
     <ClCompile Include="admin.cpp" />
     <ClCompile Include="bf2.cpp" />
+    <ClCompile Include="bf2web.cpp" />
     <ClCompile Include="game.cpp" />
+    <ClCompile Include="http.client.cpp" />
+    <ClCompile Include="http.cpp" />
     <ClCompile Include="key.cpp" />
     <ClCompile Include="playerdb.cpp" />
     <ClCompile Include="playerdb.mysql.cpp" />

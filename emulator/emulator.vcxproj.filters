@@ -49,6 +49,12 @@
     <Filter Include="Source Files\serverbrowsing">
       <UniqueIdentifier>{8ecb325a-6c3b-4ae6-bc2c-5872cdeec269}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Header Files\http">
+      <UniqueIdentifier>{4c6de96f-02e4-436e-b7c1-5f94235f9639}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\http">
+      <UniqueIdentifier>{0aa97543-32a7-48a3-ad4d-4289097191e6}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="utils.h">
@@ -127,7 +133,16 @@
       <Filter>Header Files\serverbrowsing</Filter>
     </ClInclude>
     <ClInclude Include="admin.h">
-      <Filter>Header Files</Filter>
+      <Filter>Header Files\http</Filter>
+    </ClInclude>
+    <ClInclude Include="http.client.h">
+      <Filter>Header Files\http</Filter>
+    </ClInclude>
+    <ClInclude Include="http.h">
+      <Filter>Header Files\http</Filter>
+    </ClInclude>
+    <ClInclude Include="bf2web.h">
+      <Filter>Header Files\http</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -204,7 +219,16 @@
       <Filter>Source Files\serverbrowsing</Filter>
     </ClCompile>
     <ClCompile Include="admin.cpp">
-      <Filter>Source Files</Filter>
+      <Filter>Source Files\http</Filter>
+    </ClCompile>
+    <ClCompile Include="http.client.cpp">
+      <Filter>Source Files\http</Filter>
+    </ClCompile>
+    <ClCompile Include="http.cpp">
+      <Filter>Source Files\http</Filter>
+    </ClCompile>
+    <ClCompile Include="bf2web.cpp">
+      <Filter>Source Files\http</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>

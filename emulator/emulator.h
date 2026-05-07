@@ -16,6 +16,7 @@ namespace gamespy
 	class CDKeyServer;
 	class StatsServer;
 	class AdminServer;
+	class HttpServer;
 	class Emulator
 	{
 		boost::asio::io_context& m_Context;
@@ -28,6 +29,7 @@ namespace gamespy
 		std::unique_ptr<CDKeyServer> m_CDKeyServer;
 		std::unique_ptr<StatsServer> m_StatsServer;
 		std::unique_ptr<AdminServer> m_AdminServer;
+		std::unique_ptr<HttpServer> m_HttpServer;
 
 	public:
 		Emulator(boost::asio::io_context& context);
@@ -40,6 +42,7 @@ namespace gamespy
 		task<void> InitPlayerDB(int argc, char* argv[]);
 		task<void> InitAdminServer(int argc, char* argv[]);
 		task<void> InitStatsServer(int argc, char* argv[]);
+		task<void> InitHttpServer(int argc, char* argv[]);
 	};
 }
 

@@ -17,7 +17,7 @@ namespace gamespy
 		std::string m_Auth;
 
 	public:
-		AdminServer(boost::asio::io_context& context, GameDB& gameDB, PlayerDB& playerDB, const std::string& username, const std::string& password, boost::asio::ip::port_type port = 8081);
+		AdminServer(boost::asio::io_context& context, GameDB& gameDB, PlayerDB& playerDB, const std::string& username, const std::string& password, boost::asio::ip::port_type port);
 		~AdminServer();
 
 		boost::asio::awaitable<void> AcceptClients();

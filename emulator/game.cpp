@@ -105,12 +105,23 @@ bool Game::IsValidParamName(const std::string_view& paramName)
 	if (paramName.empty())
 		return false;
 
+	// Column names should only contain alphanumeric characters and underscores
+	// Must start with a letter or underscore (not a digit)
+	// Must not start with "__" (reserved for internal use)
+	if (paramName.starts_with("__"))
+		return false;
+
+	// First character must be a letter or underscore
+	if (!std::isalpha(paramName[0]) && paramName[0] != '_')
+		return false;
+
+	// Remaining characters must be alphanumeric or underscore
 	for (const auto& c : paramName) {
-		if (std::isspace(c))
+		if (!std::isalnum(c) && c != '_')
 			return false;
 	}
 
-	return !paramName.starts_with("__");
+	return true;
 }
 
 auto Game::GetParamSendType(const std::string_view& keyName) const -> KeyType::Send

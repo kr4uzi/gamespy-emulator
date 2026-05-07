@@ -144,6 +144,7 @@ boost::asio::awaitable<void> LoginClient::HandleNewUser(const std::span<const ch
 	else {
 		m_PlayerData.emplace(*nick, *email, utils::md5(password), "??");
 		co_await m_PlayerDB.CreatePlayer(*m_PlayerData);
+
 		auto response = std::format(R"(\nur\\userid\{}\profileid\{}\id\1\final\)", m_PlayerData->GetUserID(), m_PlayerData->GetProfileID());
 		co_await m_Socket.async_send(boost::asio::buffer(response), boost::asio::use_awaitable);
 		std::println("[login] created new user: {}", *nick);
@@ -254,7 +255,8 @@ boost::asio::awaitable<void> LoginClient::SendError(std::uint32_t requestId, std
 boost::asio::awaitable<void> LoginClient::SendPlayerData(std::uint32_t requestId)
 {
 	using namespace std::chrono_literals;
-	auto response = std::format(R"(\pi\\profileid\{}\nick\{}\userid\{}\email\{}\sig\{}\uniquenick\{}\firstname\\lastname\\countrycode\{}\birthday\{}\lon\0.000000\lat\0.000000\loc\\id\{}\final\)",
+
+	auto response = std::format(R"(\pi\\profileid\{}\nick\{}\userid\{}\email\{}\sig\{}\uniquenick\{}\pid\0\firstname\\lastname\\countrycode\{}\birthday\{}\lon\0.000000\lat\0.000000\loc\\id\{}\final\)",
 		m_PlayerData->GetProfileID(), m_PlayerData->name, m_PlayerData->GetUserID(), m_PlayerData->email, m_LoginTicket, m_PlayerData->name, m_PlayerData->country, utils::to_date(std::chrono::sys_days{ 2014y / 05 / 31 }), requestId);
 	co_await m_Socket.async_send(boost::asio::buffer(response), boost::asio::use_awaitable);
 }
