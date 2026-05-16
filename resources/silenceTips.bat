@@ -1,4 +1,6 @@
 @echo off
+REM show fps counter: renderer.drawfps 0
+REM remove fps lock: gamelock.fps 0
 setlocal enabledelayedexpansion
 
 set lines=DuckInTurret;^
