@@ -25,6 +25,7 @@ bool should_redirect(const char* name)
 {
     return name && (std::strstr(name, "gamespy") || std::strstr(name, "dice.se"));
 }
+
 LONG g_detours_error = -1;
 auto gs_gethostbyname = ::gethostbyname;
 std::array<char, 4> g_redirect_address;
@@ -229,7 +230,7 @@ BOOL WINAPI DllMain(HINSTANCE hinst, DWORD dwReason, LPVOID reserved)
             if (!detour_gethostbyname())
                 return FALSE;
 
-            auto responseIP = std::string(INET_ADDRSTRLEN, 0);
+            char responseIP[INET_ADDRSTRLEN];
             ::inet_ntop(AF_INET, g_redirect_address.data(), responseIP.data(), responseIP.size());
             std::println("[gamespy] redirecting all requests to {}", responseIP);
         }

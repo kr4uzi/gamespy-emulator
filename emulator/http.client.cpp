@@ -224,30 +224,37 @@ boost::asio::awaitable<void> HttpClient::Run()
 	boost::asio::steady_timer m_Timeout{ m_Socket.get_executor(), std::chrono::seconds(15) };
 	m_Timeout.async_wait([&](const auto& error) {
 		if (error) return;
+		std::println("[http] connection timed out");
 		m_Socket.cancel();
 	});
 
 	auto buffer = boost::beast::flat_buffer{ 8192 };
 	auto request = boost::beast::http::request<boost::beast::http::dynamic_body>{};
 	const auto& [error, length] = co_await boost::beast::http::async_read(m_Socket, buffer, request, boost::asio::as_tuple(boost::asio::use_awaitable));
-	if (error || request.method() != boost::beast::http::verb::get) {
+	if (error) {
+		std::println("[http] failed to read request: {}", error.message());
+		co_return;
+	} else if (request.method() != boost::beast::http::verb::get) {
+		std::println("[http] failed to read request or method is not GET");
 		co_return;
 	}
 
+	//keepAlive = request.keep_alive();
 	auto uri = boost::urls::parse_origin_form(request.target());
 	if (!uri) {
+		std::println("[http] failed to parse URI");
 		co_return;
 	}
 
 	std::string host{ request[boost::beast::http::field::host] };
 	std::transform(host.begin(), host.end(), host.begin(), [](unsigned char c) { return std::tolower(c); });
+	std::println("HTTP Request: {}{}", host, std::string(uri->buffer()));
 
 	if (host == "eapusher.dice.se") {
 		auto path = uri->encoded_path();
 		if (path == "/image_english.png") {
 			auto response = boost::beast::http::response<boost::beast::http::file_body>{};
 			response.version(request.version());
-			response.keep_alive(false);
 			response.result(boost::beast::http::status::ok);
 
 			boost::beast::error_code ec;
@@ -261,9 +268,14 @@ boost::asio::awaitable<void> HttpClient::Run()
 		auto body = co_await HandleBF2Web(*uri);
 		auto response = boost::beast::http::response<boost::beast::http::string_body>{};
 		response.version(request.version());
-		response.keep_alive(false);
 		response.result(boost::beast::http::status::ok);
 		response.body() += body;
+
 		co_await boost::beast::http::async_write(m_Socket, response, boost::asio::as_tuple(boost::asio::use_awaitable));
+
+		// wait one second before closing the connection because of the select bug on macos/wine/bf2
+		// https://bugs.winehq.org/show_bug.cgi?id=59787
+		boost::asio::steady_timer m_Timeout{ m_Socket.get_executor(), std::chrono::seconds(1) };
+		co_await m_Timeout.async_wait(boost::asio::use_awaitable);
 	}
 }

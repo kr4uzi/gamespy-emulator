@@ -364,6 +364,7 @@ FodyWeavers.xsd
 vcpkg_installed
 
 .vscode/
+.DS_STORE
 
 emulator/players.sqlite3
 emulator/emulator
