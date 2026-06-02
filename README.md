@@ -17,6 +17,7 @@ Use the -help flag to see all available options
 Other resources:
 - BF2 Statistics 4.0.0 (PHP8 support and official ranked server files - see my bf2stats repo)
 - BF2 CD Key Changer: https://github.com/art567/bf2keyman
+- Punkbuster Update: Download & execute official [PB Setup](https://www.evenbalance.com/downloads/W/gui/pbsetup.zip) and then overwrite the pbgame.htm with the the one in [research/pbgame.htm](https://github.com/kr4uzi/gamespy-emulator/blob/main/research/pbgame.htm). You can then manually add & update Battlefield 2
 
 Battlefield 2:
 - Note: this emulator has native support for bf2stats
