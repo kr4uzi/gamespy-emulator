@@ -5,6 +5,12 @@
 #include <print>
 using namespace gamespy;
 
+namespace {
+	// cap the read buffer so a client that never sends the final terminator
+	// cannot grow it without bound (memory-exhaustion DoS)
+	constexpr std::size_t max_packet_buffer_size = 2048;
+}
+
 SearchClient::SearchClient(boost::asio::ip::tcp::socket socket, PlayerDB& db)
 	: m_Socket(std::move(socket)), m_DB(db)
 {
@@ -81,7 +87,7 @@ boost::asio::awaitable<void> SearchClient::Process()
 {
 	auto buffer = std::string{};
 	while (m_Socket.is_open()) {
-		auto [error, length] = co_await boost::asio::async_read_until(m_Socket, boost::asio::dynamic_buffer(buffer), "\\final\\", boost::asio::as_tuple(boost::asio::use_awaitable));
+		auto [error, length] = co_await boost::asio::async_read_until(m_Socket, boost::asio::dynamic_buffer(buffer, max_packet_buffer_size), "\\final\\", boost::asio::as_tuple(boost::asio::use_awaitable));
 		if (error) break;
 
 		auto packet = std::span{ buffer.data(), length };

@@ -41,12 +41,16 @@ namespace {
 		return hash;
 	}
 
+	// cap the read buffer so a client that never sends the final terminator cannot grow
+	// it without bound; snapshots can be large (end-of-round data), so allow headroom
+	constexpr std::size_t max_snapshot_buffer_size = 512 * 1024;
+
 	boost::asio::experimental::coro<std::span<char>> packet_reader(boost::asio::ip::tcp::socket& sock)
 	{
 		constexpr auto packetEnd = std::string_view{ "\\final\\" };
 		std::string buffer;
 		while (sock.is_open()) {
-			const auto& [error, length] = co_await boost::asio::async_read_until(sock, boost::asio::dynamic_buffer(buffer), packetEnd, boost::asio::as_tuple);
+			const auto& [error, length] = co_await boost::asio::async_read_until(sock, boost::asio::dynamic_buffer(buffer, max_snapshot_buffer_size), packetEnd, boost::asio::as_tuple);
 			if (error) break;
 
 			auto encoded = std::span(buffer.data(), length - packetEnd.size());

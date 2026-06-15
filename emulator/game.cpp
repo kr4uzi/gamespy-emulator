@@ -31,6 +31,9 @@ Game::Game(GameData data)
 {
 	if (std::size(m_Data.keys) > ::gamespy_max_registered_keys)
 		throw std::overflow_error{ "too many keys" };
+
+	if (m_Data.secretKey.empty())
+		throw std::runtime_error{ "secret key is empty" };
 }
 
 Game::~Game()

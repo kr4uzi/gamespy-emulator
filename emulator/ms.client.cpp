@@ -29,6 +29,21 @@ namespace {
 			auto offset = std::size_t{ 0 };
 			while (available - offset >= 3) {
 				auto packetLength = (std::size_t(buffer[offset]) << 8) | std::size_t(buffer[offset + 1]);
+				// a packet must contain at least the 2 length bytes + 1 type byte;
+				// anything smaller would make the bytes[2]/subspan(3) accesses below
+				// read out of bounds (subspan(3) on a <3 byte span is undefined behavior)
+				if (packetLength < 3) {
+					std::println("[browser] received malformed packet (length {})", packetLength);
+					co_return;
+				}
+
+				// a packet larger than our receive buffer can never be satisfied and would
+				// otherwise spin this loop on a zero-length async_read_some that returns immediately
+				if (packetLength > buffer.size()) {
+					std::println("[browser] received oversized packet (length {})", packetLength);
+					co_return;
+				}
+
 				if (packetLength > available - offset)
 					break; // full packet was not yet received
 

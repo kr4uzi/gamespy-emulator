@@ -61,7 +61,7 @@ namespace {
 	auto ExtractFieldList(PacketIterator& start, const PacketIterator& end)
 	{
 		return ExtractString(start, end, ::fields_total_length).and_then([](auto fieldStr) -> std::expected<std::vector<std::string_view>, ServerListRequest::ParseError> {
-			if (fieldStr.empty() && fieldStr.front() != '\\')
+			if (fieldStr.empty() || fieldStr.front() != '\\')
 				return std::unexpected(ServerListRequest::ParseError::invalid_key);
 
 			auto fields = std::vector<std::string_view>{};

@@ -36,7 +36,12 @@ boost::asio::awaitable<void> StatsServer::AcceptClients()
 
 boost::asio::awaitable<void> StatsServer::HandleIncoming(tcp::socket socket)
 {
-	auto addr = socket.remote_endpoint().address().to_string();
+	// remote_endpoint() throws if the peer already reset the connection; since this
+	// coroutine is spawned detached, an escaping exception would terminate the whole
+	// io_context, so query it without throwing instead.
+	boost::system::error_code ec;
+	auto remote = socket.remote_endpoint(ec);
+	auto addr = ec ? std::string{ "<unknown>" } : remote.address().to_string();
 	try {
 		StatsClient client(std::move(socket), m_GameDB, m_PlayerDB, m_SnapshotEndpoint);
 		co_await client.Process();

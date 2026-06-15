@@ -8,6 +8,8 @@
 #include <ranges>
 #include <optional>
 #include <filesystem>
+#include <algorithm>
+#include <system_error>
 #include <boost/beast/core.hpp>
 #include <boost/beast/http.hpp>
 #include <boost/beast/version.hpp>
@@ -220,7 +222,17 @@ public:
 
 	net::awaitable<bool> HandleFileLookup(const http::request<http::dynamic_body>& request, const std::string_view& path)
 	{
-		auto filePath = std::filesystem::path("http") / (path == "/" ? "index.html" : path.substr(1));
+		std::error_code ec;
+		const auto root = std::filesystem::weakly_canonical(std::filesystem::absolute("http"), ec);
+		auto filePath = std::filesystem::weakly_canonical(root / (path == "/" ? "index.html" : path.substr(1)), ec);
+
+		// prevent path traversal (e.g. "/../../etc/passwd"): the resolved file must stay within root
+		auto match = std::mismatch(root.begin(), root.end(), filePath.begin(), filePath.end());
+		if (ec || root.empty() || match.first != root.end()) {
+			co_await SendResponse(request, http::status::not_found);
+			co_return false;
+		}
+
 		if (!std::filesystem::exists(filePath)) {
 			co_await SendResponse(request, http::status::not_found);
 			co_return false;
@@ -303,7 +315,9 @@ AdminServer::AdminServer(boost::asio::io_context& context, GameDB& gameDB, Playe
 	else {
 		m_Auth = "Basic " + utils::base64_encode(std::format("{}:{}", username, password));
 		m_Acceptor.bind(tcp::endpoint(tcp::v6(), port));
-		std::println("[admin] listening on port {}, username={}, password={} (internet)", port, username, password);
+
+		auto shownpw = std::string(password.size(), '*');
+		std::println("[admin] listening on port {}, username={}, password={} (internet)", port, username, shownpw);
 	}
 
 	m_Acceptor.listen();
