@@ -222,13 +222,13 @@ public:
 
 	net::awaitable<bool> HandleFileLookup(const http::request<http::dynamic_body>& request, const std::string_view& path)
 	{
-		std::error_code ec;
-		const auto root = std::filesystem::weakly_canonical(std::filesystem::absolute("http"), ec);
-		auto filePath = std::filesystem::weakly_canonical(root / (path == "/" ? "index.html" : path.substr(1)), ec);
+		std::error_code fsErr;
+		const auto root = std::filesystem::weakly_canonical(std::filesystem::absolute("http"), fsErr);
+		auto filePath = std::filesystem::weakly_canonical(root / (path == "/" ? "index.html" : path.substr(1)), fsErr);
 
 		// prevent path traversal (e.g. "/../../etc/passwd"): the resolved file must stay within root
 		auto match = std::mismatch(root.begin(), root.end(), filePath.begin(), filePath.end());
-		if (ec || root.empty() || match.first != root.end()) {
+		if (fsErr || root.empty() || match.first != root.end()) {
 			co_await SendResponse(request, http::status::not_found);
 			co_return false;
 		}
@@ -238,10 +238,10 @@ public:
 			co_return false;
 		}
 
-		beast::error_code ec;
+		beast::error_code fileErr;
 		http::file_body::value_type body;
-		body.open(filePath.string().c_str(), boost::beast::file_mode::scan, ec);
-		if (ec) {
+		body.open(filePath.string().c_str(), boost::beast::file_mode::scan, fileErr);
+		if (fileErr) {
 			co_await SendResponse(request, http::status::internal_server_error, { {"error", "failed to open file"} });
 			co_return false;
 		}

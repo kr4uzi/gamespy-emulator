@@ -231,7 +231,7 @@ BOOL WINAPI DllMain(HINSTANCE hinst, DWORD dwReason, LPVOID reserved)
                 return FALSE;
 
             char responseIP[INET_ADDRSTRLEN];
-            ::inet_ntop(AF_INET, g_redirect_address.data(), responseIP.data(), responseIP.size());
+            ::inet_ntop(AF_INET, g_redirect_address.data(), responseIP, sizeof(responseIP));
             std::println("[gamespy] redirecting all requests to {}", responseIP);
         }
         catch (const WindowsError& e) {
