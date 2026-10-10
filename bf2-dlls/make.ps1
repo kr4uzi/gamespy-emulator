@@ -71,11 +71,6 @@ function main {
     Remove-Item *.obj, *.lib, *.exp, *.def, *.dll -Force -ErrorAction SilentlyContinue
     return
   }
-  elseif ($Target) {
-    $file = Get-Item $Target
-    Build-Dll -VsInstallDir $vsInstallDir -Arch "x86" -OutName $file.BaseName -Target "$($file.Name) exports.def"
-    return
-  }
 
   $ErrorActionPreference = "Stop"
   $vsInstallDir = Get-VSInstallDir
@@ -89,7 +84,13 @@ function main {
     Write-Error "Please execute this script using the Visual Studio Command Line: Tools > Command Line > Developer PowerShell"
     return
   }
-  
+
+  if ($Target) {
+    $file = Get-Item $Target
+    Build-Dll -VsInstallDir $vsInstallDir -Arch "x86" -OutName $file.BaseName -Target "$($file.Name) exports.def"
+    return
+  }
+
   $files = Get-ChildItem *.cpp
   foreach ($file in $files) {
     Build-Dll -VsInstallDir $vsInstallDir -Arch "x86" -OutName $file.BaseName -Target "$($file.Name) exports.def"
