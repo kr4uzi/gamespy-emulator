@@ -46,8 +46,12 @@ jobs:
       - name: Prepare Linux environment
         if: matrix.platform == 'linux'
         run: |
+          sudo add-apt-repository --yes ppa:ubuntu-toolchain-r/test
+          sudo apt-get update
+          sudo apt-get install --yes g++-15
           echo "VCPKG_ROOT=$VCPKG_INSTALLATION_ROOT" >> "$GITHUB_ENV"
-          echo "CXX=g++-14" >> "$GITHUB_ENV"
+          echo "CC=gcc-15" >> "$GITHUB_ENV"
+          echo "CXX=g++-15" >> "$GITHUB_ENV"
 
       - name: Configure
         run: cmake --preset ${{ matrix.preset }}

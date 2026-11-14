@@ -33,7 +33,7 @@ The emulator uses one root `CMakeLists.txt` for Windows and Linux on x64 and ARM
 Visual Studio and VS Code can open the repository folder directly. The old manually maintained
 solution/project files are replaced by CMake-generated projects.
 
-Requirements: CMake 3.30+, C++23 (GCC 14+ or a recent MSVC), Boost 1.88+, OpenSSL,
+Requirements: CMake 3.30+, C++23 (GCC 15+ or a recent MSVC), Boost 1.88+, OpenSSL,
 SQLite, nlohmann-json, and Python 3 for the integration tests. Visual Studio 2026 requires CMake 4.2+.
 C++23 supplies the ranges, coroutine, formatting and printing facilities used here without opting
 into a future language mode. Neither the GameSpy SDK nor Detours is needed to build the emulator.
@@ -56,11 +56,12 @@ For Windows ARM64, replace `windows-x64` with `windows-arm64`. That preset lets 
 installed Visual Studio version. The executable is `build/<preset>/Release/emulator.exe`.
 Windows executables use the static C++ runtime and static dependencies.
 
-On Linux, install GCC 14+, CMake, Ninja, pkg-config, and the usual vcpkg bootstrap prerequisites:
+On Linux, install GCC 15+, CMake, Ninja, pkg-config, and the usual vcpkg bootstrap prerequisites:
 
 ```sh
 export VCPKG_ROOT=/path/to/vcpkg
-export CXX=g++-14
+export CC=gcc-15
+export CXX=g++-15
 cmake --preset linux-x64
 cmake --build --preset linux-x64
 ctest --preset linux-x64
