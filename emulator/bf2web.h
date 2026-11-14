@@ -2,6 +2,7 @@
 #ifndef _GAMESPY_BF2WEB_H_
 #define _GAMESPY_BF2WEB_H_
 
+#include <cstdint>
 #include <vector>
 #include <string_view>
 #include <string>
@@ -15,7 +16,7 @@ namespace gamespy
 		class response
 		{
 			bool error = false;
-			std::uint32_t error_code;
+			std::uint32_t error_code = 0;
 
 		public:
 			void SetError(bool error, std::uint32_t code = 0)

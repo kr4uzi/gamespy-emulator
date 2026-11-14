@@ -3,6 +3,7 @@
 #include "utils.h"
 #include <format>
 #include <print>
+#include <cctype>
 using namespace gamespy;
 
 namespace {
@@ -33,7 +34,7 @@ boost::asio::awaitable<void> SearchClient::HandleSearchNicks(const std::span<con
 	}
 	else if (passEnc && !passEnc->empty()) {
 		std::string password = utils::passdecode(std::string{ *passEnc });
-		passwordMD5 = utils::md5(*passEnc);
+		passwordMD5 = utils::md5(password);
 	}
 
 	if (!email || passwordMD5.empty()) {
@@ -42,7 +43,9 @@ boost::asio::awaitable<void> SearchClient::HandleSearchNicks(const std::span<con
 	}
 
 	// note: we should not send and error but those results: GameSpy/GP/gp.h:253
-	const auto emailNormalized = *email | std::views::transform((int(*)(int))std::tolower) | std::ranges::to<std::string>();
+	const auto emailNormalized = *email
+		| std::views::transform([](unsigned char c) { return static_cast<char>(std::tolower(c)); })
+		| std::ranges::to<std::string>();
 	const auto& players = co_await m_DB.GetPlayerByMailAndPassword(emailNormalized, passwordMD5);
 	if (players.empty())
 		co_await SendError(551, "Unable to get any associated profiles.", true);
@@ -53,34 +56,34 @@ boost::asio::awaitable<void> SearchClient::HandleSearchNicks(const std::span<con
 			response += "\\nick\\" + player.name + "\\uniquenick\\" + player.name;
 
 		response += R"(\ndone\\final\)";
-		co_await m_Socket.async_send(boost::asio::buffer(response), boost::asio::use_awaitable);
+		co_await boost::asio::async_write(m_Socket, boost::asio::buffer(response), boost::asio::use_awaitable);
 	}	
 }
 
-boost::asio::awaitable<void> SearchClient::HandleProfileExists(const std::span<const char>& packet)
+boost::asio::awaitable<void> SearchClient::HandleCheck(const std::span<const char>& packet)
 {
+	// GP/gpiSearch.c GPI_SEARCH_CHECK validates all three account credentials.
 	auto nick = utils::value_for_key(packet, "\\nick\\");
-	auto uniqueNick = utils::value_for_key(packet, "\\uniquenick\\");
-	std::string_view name;
-	if (nick)
-		name = *nick;
-	else if (uniqueNick)
-		name = *uniqueNick;
-
-	if (name.empty()) {
-		co_await SendError(0, "Invalid Query!", true);
-		co_return;
-	}
-	
-	if (co_await m_DB.HasPlayer(name)) {
-		auto playerData = co_await m_DB.GetPlayerByName(name);
-		auto response = std::format(R"(\cur\0\pid\{}\final\)", playerData->GetProfileID());
-		co_await m_Socket.async_send(boost::asio::buffer(response), boost::asio::use_awaitable);
-	}
+	auto email = utils::value_for_key(packet, "\\email\\");
+	auto passEnc = utils::value_for_key(packet, "\\passenc\\");
+	std::uint32_t result = 0;
+	std::uint64_t profile = 0;
+	if (!nick || nick->empty()) result = 0x0E02; // GP_CHECK_BAD_NICK
+	else if (!email || email->empty()) result = 0x0E01; // GP_CHECK_BAD_EMAIL
+	else if (!passEnc) result = 0x0E03; // GP_CHECK_BAD_PASSWORD
 	else {
-		auto response = std::format("Username [{}] doesn't exist!", name);
-		co_await SendError(265, "Invalid Query!", true);
+		auto player = co_await m_DB.GetPlayerByName(*nick);
+		if (!player) result = 0x0E02;
+		else if (!std::ranges::equal(*email, player->email,
+			[](unsigned char left, unsigned char right) { return std::tolower(left) == std::tolower(right); }))
+			result = 0x0E01;
+		else if (utils::md5(utils::passdecode(std::string(*passEnc))) != player->password)
+			result = 0x0E03;
+		else profile = player->GetProfileID();
 	}
+
+	auto response = std::format(R"(\cur\{}\pid\{}\final\)", result, profile);
+	co_await boost::asio::async_write(m_Socket, boost::asio::buffer(response), boost::asio::use_awaitable);
 }
 
 boost::asio::awaitable<void> SearchClient::Process()
@@ -107,7 +110,7 @@ boost::asio::awaitable<void> SearchClient::Process()
 		if (buffer.starts_with("\\nicks\\"))
 			co_await HandleSearchNicks(packet);
 		else if (buffer.starts_with("\\check\\"))
-			co_await HandleProfileExists(packet);
+			co_await HandleCheck(packet);
 		else {
 			std::println("[search] unhandled packet: {}", buffer);
 			co_await SendError(0, "Invalid Query!");
@@ -125,5 +128,6 @@ boost::asio::awaitable<void> SearchClient::SendError(std::uint32_t errorCode, co
 	}
 
 	response += "\\final\\";
-	co_await m_Socket.async_send(boost::asio::buffer(response), boost::asio::use_awaitable);
+	co_await boost::asio::async_write(m_Socket, boost::asio::buffer(response), boost::asio::use_awaitable);
+	if (fatal) m_Socket.close();
 }

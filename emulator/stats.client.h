@@ -3,18 +3,18 @@
 #include <cstdint>
 #include <string>
 #include <span>
-#include <boost/asio/experimental/coro.hpp>
+#include <optional>
 
 namespace gamespy {
 	class GameDB;
 	class PlayerDB;
-	struct TextPacket;
 
 	class StatsClient {
 		boost::asio::ip::tcp::socket m_Socket;
 		GameDB& m_GameDB;
 		PlayerDB& m_PlayerDB;
-		const std::optional<boost::asio::ip::tcp::endpoint>& m_SnapshotEndpoint;
+		std::optional<boost::asio::ip::tcp::endpoint> m_SnapshotEndpoint;
+		std::string m_ReadBuffer;
 		std::string m_ServerChallenge;
 		std::int32_t m_SessionKey;
 
@@ -26,7 +26,8 @@ namespace gamespy {
 
 	private:
 		boost::asio::awaitable<void> SendPacket(std::string message);
-		boost::asio::awaitable<bool> Authenticate(boost::asio::experimental::coro<std::span<char>>& reader);
-		boost::asio::awaitable<void> HandeSnapshot(const std::string_view& data, bool final);
+		boost::asio::awaitable<std::optional<std::string>> ReadPacket();
+		boost::asio::awaitable<bool> Authenticate();
+		boost::asio::awaitable<void> HandleSnapshot(const std::string_view& data);
 	};
 }

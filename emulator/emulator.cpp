@@ -19,8 +19,18 @@
 
 using namespace gamespy;
 
+namespace {
+	std::uint16_t parse_port(std::string_view text)
+	{
+		const auto port = utils::parse_uint32(text);
+		if (!port || *port == 0 || *port > 65535)
+			throw std::invalid_argument{ "port must be an integer between 1 and 65535" };
+		return static_cast<std::uint16_t>(*port);
+	}
+}
+
 Emulator::Emulator(boost::asio::io_context& context)
-	: m_Context(context)
+	: m_Context(context), m_Sessions(context.get_executor())
 {
 
 }
@@ -32,9 +42,9 @@ Emulator::~Emulator()
 
 task<void> Emulator::Launch(int argc, char* argv[])
 {
-	for (int i = 0; i < argc; i++) {
+	for (int i = 1; i < argc; i++) {
 		auto arg = std::string_view{ argv[i] };
-		if (arg == "-h" || arg == "/?" || arg == "--help") {
+		if (arg == "-h" || arg == "-help" || arg == "/?" || arg == "--help") {
 			std::println("Allowed options:");
 			std::println("-h [--help]              : produces this message");
 			std::println("-gamedb=<stdin|path>     : use game-database (json) from standard input or filepath");
@@ -44,20 +54,20 @@ task<void> Emulator::Launch(int argc, char* argv[])
 			std::println("-playerdb-username       : mysql username for player database");
 			std::println("-playerdb-password       : the user's password");
 			std::println("-playerdb-database       : the database name for the player database");
-			std::println();
+			std::println("");
 			std::println("Stats server options:");
 			std::println("-stats-host              : the snapshot server host (bf2stats)");
 			std::println("-stats-port              : the snapshot server host port (bf2stats)");
 			std::println("Note: This is currently an experimental feature with a hardcoded endpoint:");
 			std::println("http://<stats-host>:<stats-port>/ASP/bf2statistics.php");
-			std::println();
+			std::println("");
 			std::println("Admin server options (http)");
 			std::println("-admin-user              : the username for the admin server (remote)");
 			std::println("-admin-password          : the password for the admin server (remote)");
 			std::println("-admin-port              : the port the admin server runs on (default: 8081)");
 			std::println("[-admin-disabled]        : disables the admin server");
 			std::println("Note: If no user and password is provided, the admin server will only be localhost only");
-			std::println();
+			std::println("");
 			std::println("-http-enabled=true       : enable the http server for bf2 unlocks (default: false)");
 			co_return;
 		}
@@ -70,14 +80,14 @@ task<void> Emulator::Launch(int argc, char* argv[])
 	co_await InitHttpServer(argc, argv);
 
 	m_MasterServer = std::make_unique<MasterServer>(m_Context, *m_GameDB);
-	m_LoginServer = std::make_unique<LoginServer>(m_Context, *m_GameDB, *m_PlayerDB);
-	m_SearchServer = std::make_unique<SearchServer>(m_Context, *m_PlayerDB);
-	m_BrowserServer = std::make_unique<BrowserServer>(m_Context, *m_GameDB);
+	m_LoginServer = std::make_unique<LoginServer>(m_Context, *m_GameDB, *m_PlayerDB, m_Sessions);
+	m_SearchServer = std::make_unique<SearchServer>(m_Context, *m_PlayerDB, m_Sessions);
+	m_BrowserServer = std::make_unique<BrowserServer>(m_Context, *m_GameDB, m_Sessions);
 	// cd-key server doesn't need db support as we accept all keys
 	m_CDKeyServer = std::make_unique<CDKeyServer>(m_Context);
 
 	using namespace boost::asio::experimental::awaitable_operators;
-	auto wrap = [](const std::string_view& name, task<void>&& coro) -> task<void>
+	auto wrap = [](std::string_view name, task<void> coro) -> task<void>
 	{
 		try {
 			co_await std::move(coro);
@@ -85,6 +95,7 @@ task<void> Emulator::Launch(int argc, char* argv[])
 		catch (const std::exception& e)
 		{
 			std::println(std::cerr, "[{}][fatal] {}", name, e.what());
+			throw;
 		}
 	};
 
@@ -101,13 +112,24 @@ task<void> Emulator::Launch(int argc, char* argv[])
 		&& wrap("http", m_HttpServer ? m_HttpServer->AcceptClients() : noop())
 	);
 
-	co_await m_GameDB->Disconnect();
-	co_await m_PlayerDB->Disconnect();
+}
+
+void Emulator::Stop()
+{
+	m_Sessions.Stop();
+}
+
+task<void> Emulator::Shutdown()
+{
+	m_Sessions.Stop();
+	co_await m_Sessions.Wait();
+	if (m_GameDB) co_await m_GameDB->Disconnect();
+	if (m_PlayerDB) co_await m_PlayerDB->Disconnect();
 }
 
 task<void> Emulator::InitGameDB(int argc, char* argv[])
 {
-	for (int i = 0; i < argc; i++) {
+	for (int i = 1; i < argc; i++) {
 		auto arg = std::string_view{ argv[i] };
 		if (arg.starts_with("-gamedb=")) {
 			auto filename = arg.substr(8);
@@ -139,18 +161,17 @@ task<void> Emulator::InitPlayerDB(int argc, char* argv[])
 	std::string host;
 	std::optional<std::uint16_t> port;
 
-	for (int i = 0; i < argc; i++) {
+	for (int i = 1; i < argc; i++) {
 		auto arg = std::string_view{ argv[i] };
 		if (arg.starts_with("-playerdb=")) {
 			m_PlayerDB = std::make_unique<PlayerDBSQLite>(arg.substr(10));
-			co_await m_PlayerDB->Connect();
 			break;
 		}
 		else if (arg.starts_with("-playerdb-")) {
 			if (arg.starts_with("-playerdb-host="))
 				host = arg.substr(15);
 			else if (arg.starts_with("-playerdb-port="))
-				port = std::atoi(arg.substr(15).data());
+				port = parse_port(arg.substr(15));
 			else if (arg.starts_with("-playerdb-username="))
 				params.username = arg.substr(19);
 			else if (arg.starts_with("-playerdb-password="))
@@ -195,7 +216,7 @@ task<void> Emulator::InitAdminServer(int argc, char* argv[])
 	std::string username;
 	std::string password;
 	std::uint16_t port = 8081;
-	for (int i = 0; i < argc; i++) {
+	for (int i = 1; i < argc; i++) {
 		auto arg = std::string_view{ argv[i] };
 		if (arg.starts_with("-admin-user=")) {
 			username = arg.substr(12);
@@ -208,11 +229,11 @@ task<void> Emulator::InitAdminServer(int argc, char* argv[])
 			co_return;
 		}
 		else if (arg.starts_with("-admin-port=")) {
-			port = std::atoi(arg.substr(12).data());
+			port = parse_port(arg.substr(12));
 		}
 	}
 
-	m_AdminServer = std::make_unique<AdminServer>(m_Context, *m_GameDB, *m_PlayerDB, username, password, port);
+	m_AdminServer = std::make_unique<AdminServer>(m_Context, *m_GameDB, *m_PlayerDB, username, password, port, m_Sessions);
 	co_return;
 }
 
@@ -221,12 +242,12 @@ task<void> Emulator::InitStatsServer(int argc, char* argv[])
 	std::string host;
 	std::optional<std::uint16_t> port;
 
-	for (int i = 0; i < argc; i++) {
+	for (int i = 1; i < argc; i++) {
 		auto arg = std::string_view{ argv[i] };
 		if (arg.starts_with("-stats-host="))
 			host = arg.substr(12);
 		else if (arg.starts_with("-stats-port="))
-			port = std::atoi(arg.substr(12).data());
+			port = parse_port(arg.substr(12));
 	}
 
 	std::optional<boost::asio::ip::tcp::endpoint> snapshotEndpoint;
@@ -236,16 +257,16 @@ task<void> Emulator::InitStatsServer(int argc, char* argv[])
 	if (!host.empty() && port)
 		snapshotEndpoint = boost::asio::ip::tcp::endpoint(boost::asio::ip::make_address(host), *port);
 
-	m_StatsServer = std::make_unique<StatsServer>(m_Context, *m_GameDB, *m_PlayerDB, snapshotEndpoint);
+	m_StatsServer = std::make_unique<StatsServer>(m_Context, *m_GameDB, *m_PlayerDB, snapshotEndpoint, m_Sessions);
 	co_return;
 }
 
 task<void> Emulator::InitHttpServer(int argc, char* argv[])
 {
-	for (int i = 0; i < argc; i++) {
+	for (int i = 1; i < argc; i++) {
 		auto arg = std::string_view{ argv[i] };
 		if (arg == "-http-enabled" || arg == "-http-enabled=true") {
-			m_HttpServer = std::make_unique<HttpServer>(m_Context, *m_GameDB, *m_PlayerDB);
+			m_HttpServer = std::make_unique<HttpServer>(m_Context, *m_GameDB, *m_PlayerDB, m_Sessions);
 			std::println("[http] enabled");
 			break;
 		}

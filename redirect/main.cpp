@@ -33,15 +33,18 @@ hostent* WINAPI redirect_gethostbyname(const char* name)
 {
     if (::should_redirect(name)) {
         static auto addr_list = std::array<char*, 2>{ g_redirect_address.data(), nullptr };
-        thread_local auto host = std::string{ name };
+        thread_local std::string host;
+        thread_local std::array<char*, 1> aliases{ nullptr };
         thread_local auto instance = hostent{
-            .h_name = host.data(),
-            .h_aliases = { nullptr },
+            .h_name = nullptr,
+            .h_aliases = aliases.data(),
             .h_addrtype = AF_INET,
             .h_length = sizeof(in_addr),
             .h_addr_list = addr_list.data()
         };
 
+        host.assign(name);
+        instance.h_name = host.data();
         std::println("[gamespy] redirecting {}", name);
         return &instance;
     }
@@ -73,14 +76,17 @@ static_assert(std::is_same_v<decltype(gs_getaddrinfo), decltype(&redirect_getadd
 
 std::string to_utf8(const wchar_t* wstr)
 {
-    auto len = ::WideCharToMultiByte(CP_UTF8, 0, wstr, -1, nullptr, 0, nullptr, nullptr);
+    if (!wstr) throw std::invalid_argument("Cannot convert a null string");
+    const auto len = ::WideCharToMultiByte(CP_UTF8, 0, wstr, -1, nullptr, 0, nullptr, nullptr);
+    if (!len) throw std::runtime_error("UTF-8 conversion failed");
     auto str = std::string(len, '\0');
-    ::WideCharToMultiByte(CP_UTF8, 0, wstr, -1, str.data(), len, nullptr, nullptr);
-    str.resize(len - 1); // prevenet null terminator from begin part of the string (.size / .length)
+    if (::WideCharToMultiByte(CP_UTF8, 0, wstr, -1, str.data(), len, nullptr, nullptr) != len)
+        throw std::runtime_error("UTF-8 conversion failed");
+    str.resize(len - 1); // Exclude the terminating NUL.
     return str;
 }
 
-class WindowsError : std::exception
+class WindowsError : public std::exception
 {
     std::wstring m_Message;
     std::string m_MessageUTF8;
@@ -145,10 +151,15 @@ bool detect_gamespy(const std::string_view& game)
         return false;
 
     std::println("[gamespy] waiting for gamespy master server response...");
-    char buffer[8];
-    ::sockaddr_in responseAddr;
+    std::array<unsigned char, 64> buffer{};
+    ::sockaddr_in responseAddr{};
     int responseAddrLen = sizeof(responseAddr);
-    if (::recvfrom(sock, buffer, sizeof(buffer), 0, (struct sockaddr*)&responseAddr, &responseAddrLen) < 0)
+    const auto length = ::recvfrom(sock, reinterpret_cast<char*>(buffer.data()), static_cast<int>(buffer.size()),
+        0, reinterpret_cast<sockaddr*>(&responseAddr), &responseAddrLen);
+    // common/gsAvailable.c: a successful reply is FE FD 09 plus a zero status.
+    if (length < 7 || responseAddr.sin_family != AF_INET || responseAddr.sin_port != htons(27900)
+        || buffer[0] != 0xFE || buffer[1] != 0xFD || buffer[2] != 0x09
+        || buffer[3] || buffer[4] || buffer[5] || buffer[6])
         return false;
 
     static_assert(sizeof(g_redirect_address) == sizeof(decltype(responseAddr)::sin_addr), "IP Address Length Missmatch");

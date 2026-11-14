@@ -118,7 +118,7 @@
             </div>
             <div class="popup-body" id="popupForm"></div>
             <div class="popup-footer" style="text-align:right;">
-                <button onclick="submitForm()">Save</button>
+                <button onclick="submitForm().catch(showError)">Save</button>
                 <button onclick="closePopup()">Cancel</button>
             </div>
         </div>
@@ -132,9 +132,19 @@
         const baseKeys = [{name: "ip", label: "IP", type: "ip"}, {name: "port", label: "Port", type: "integer"}];
         const baseKeyNames = baseKeys.map(k => k.name);
 
+        function showError(error) {
+            alert(error.message || String(error));
+        }
+
+        async function api(url, options) {
+            const response = await fetch(url, options);
+            const body = await response.json();
+            if (!response.ok) throw new Error(body.error || `Request failed (${response.status})`);
+            return body;
+        }
+
         async function loadGames() {
-            const res = await fetch('/api/games');
-            games = await res.json();
+            games = await api('/api/games');
             renderTabs();
         }
 
@@ -161,7 +171,7 @@
 
                 const refreshBtn = document.createElement('button');
                 refreshBtn.textContent = 'Refresh';
-                refreshBtn.onclick = () => loadServers(game);
+                refreshBtn.onclick = () => loadServers(game).catch(showError);
                 content.appendChild(refreshBtn);
 
                 const addBtn = document.createElement('button');
@@ -182,7 +192,7 @@
 
                 if (i === 0) {
                     currentGame = game;
-                    loadServers(game);
+                    loadServers(game).catch(showError);
                 }
             });
         }
@@ -191,16 +201,15 @@
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
             currentGame = game;
-            document.querySelector(`#content-${game.name}`).classList.add('active');
+            document.getElementById(`content-${game.name}`).classList.add('active');
             document.querySelectorAll('.tab').forEach(tab => {
                 if (tab.textContent === game.name) tab.classList.add('active');
             });
-            loadServers(game);
+            loadServers(game).catch(showError);
         }
 
         async function loadServers(game) {
-            const res = await fetch(`/api/servers?game=${encodeURIComponent(game.name)}&fields=${encodeURIComponent(game.keys.map(k => k.name).join(','))}`);
-            const servers = await res.json();
+            const servers = await api(`/api/servers?game=${encodeURIComponent(game.name)}&fields=${encodeURIComponent(game.keys.map(k => k.name).join(','))}`);
             renderTable(game, servers);
         }
 
@@ -246,7 +255,7 @@
 
                     const delBtn = document.createElement('button');
                     delBtn.textContent = 'Delete';
-                    delBtn.onclick = () => deleteServer(game, srv);
+                    delBtn.onclick = () => deleteServer(game, srv).catch(showError);
                     actions.appendChild(delBtn);
 
                     row.appendChild(actions);
@@ -346,10 +355,10 @@
                     }
                 });
 
-                await fetch(`/api/server?${params.toString()}`, { method: 'POST' });
+                await api(`/api/server?${params.toString()}`, { method: 'POST' });
 
                 closePopup();
-                loadServers(currentGame);
+                loadServers(currentGame).catch(showError);
             }
             else if (popupType == 'fields') {
                 currentGame.shownFields = [];
@@ -357,7 +366,7 @@
                     if (el.checked) currentGame.shownFields.push(el.name);
                 });
                 localStorage.setItem(currentGame.name + '-fields', JSON.stringify(currentGame.shownFields));
-                loadServers(currentGame);
+                loadServers(currentGame).catch(showError);
                 closePopup();
             }
         }
@@ -365,11 +374,11 @@
         async function deleteServer(game, srv) {
             if (!confirm("Delete this server?")) return;
             const params = new URLSearchParams({ game: game.name, ip: srv.ip, port: srv.port });
-            await fetch(`/api/server?${params.toString()}`, { method: 'DELETE' });
-            loadServers(game);
+            await api(`/api/server?${params.toString()}`, { method: 'DELETE' });
+            loadServers(game).catch(showError);
         }
 
-        loadGames();
+        loadGames().catch(showError);
     </script>
 </body>
 

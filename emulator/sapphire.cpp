@@ -14,7 +14,7 @@ using namespace gamespy;
 */
 
 unsigned char sapphire::keyrand(int limit,
-    unsigned char* user_key,
+    const unsigned char* user_key,
     unsigned char keysize,
     unsigned char* rsum,
     unsigned* keypos)
@@ -43,7 +43,7 @@ unsigned char sapphire::keyrand(int limit,
     return u;
 }
 
-void sapphire::initialize(unsigned char* key, unsigned char keysize)
+void sapphire::initialize(const unsigned char* key, unsigned char keysize)
 {
     // Key size may be up to 256 bytes.
     // Pass phrases may be used directly, with longer length
@@ -119,10 +119,11 @@ void sapphire::hash_init(void)
         cards[i] = (unsigned char)j;
 }
 
-sapphire::sapphire(unsigned char* key, unsigned char keysize)
+sapphire::sapphire(std::span<const unsigned char> key)
 {
-    if (key && keysize)
-        initialize(key, keysize);
+    if (key.size() > 255)
+        throw std::overflow_error("Key must not be longer than 255 characters!");
+    initialize(key.data(), static_cast<unsigned char>(key.size()));
 }
 
 void sapphire::burn(void)

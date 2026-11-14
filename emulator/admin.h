@@ -7,6 +7,7 @@
 
 namespace gamespy
 {
+	class Sessions;
 	class GameDB;
 	class PlayerDB;
 	class AdminServer
@@ -14,10 +15,11 @@ namespace gamespy
 		boost::asio::ip::tcp::acceptor m_Acceptor;
 		GameDB& m_GameDB;
 		PlayerDB& m_PlayerDB;
+		Sessions& m_Sessions;
 		std::string m_Auth;
 
 	public:
-		AdminServer(boost::asio::io_context& context, GameDB& gameDB, PlayerDB& playerDB, const std::string& username, const std::string& password, boost::asio::ip::port_type port);
+		AdminServer(boost::asio::io_context& context, GameDB& gameDB, PlayerDB& playerDB, const std::string& username, const std::string& password, boost::asio::ip::port_type port, Sessions& sessions);
 		~AdminServer();
 
 		boost::asio::awaitable<void> AcceptClients();

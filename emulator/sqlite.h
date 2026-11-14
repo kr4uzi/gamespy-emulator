@@ -2,6 +2,9 @@
 #ifndef _GAMESPY_SQLITE_H_
 #define _GAMESPY_SQLITE_H_
 #include <cstdint>
+#include <concepts>
+#include <stdexcept>
+#include <utility>
 #include <memory>
 #include <filesystem>
 #include <string>
@@ -80,6 +83,9 @@ namespace sqlite
 
 		db(const std::string& memoryName, bool shared);
 		db(const std::filesystem::path& dbFile);
+		~db();
+		db(const db&) = delete;
+		db& operator=(const db&) = delete;
 
 		void exec(const std::string& sql);
 		void exec(const std::string& sql, std::function<bool(const std::map<std::string_view, std::string_view>&)> handler);
@@ -95,6 +101,8 @@ namespace sqlite
 			scoped_authorizer(db& db) : m_DB{ db } {}
 
 		public:
+			scoped_authorizer(const scoped_authorizer&) = delete;
+			scoped_authorizer& operator=(const scoped_authorizer&) = delete;
 			~scoped_authorizer() { m_DB.set_authorizer(nullptr); }
 		};
 
@@ -132,7 +140,6 @@ namespace sqlite
 		typedef std::unique_ptr<void, decltype(&stmt::finalize)> stmt_ptr_t;
 		static stmt_ptr_t prepare(void* db, const std::string_view& sql);
 
-		void* m_DB;
 		stmt_ptr_t m_Stmt;
 
 	public:
@@ -152,17 +159,11 @@ namespace sqlite
 		std::size_t columns();
 		std::string_view column_name(std::size_t pos);
 
-		template<std::size_t I = 0, typename T, typename... R>
-		inline void bind(T t, R... r)
+		template<typename... T>
+		void bind(T&&... values)
 		{
-			bind_at(I + 1, t);
-			bind<I + 1, R...>(r...);
-		}
-
-		template<std::size_t I = 0>
-		inline void bind()
-		{
-
+			std::size_t pos = 1;
+			(bind_at(pos++, std::forward<T>(values)), ...);
 		}
 
 		void reset();
@@ -182,7 +183,7 @@ namespace sqlite
 			return false;
 		}
 
-		void bind_at(std::size_t pos, const std::string& str);
+		void bind_at(std::size_t pos, const std::string& str) { bind_at(pos, std::string_view{ str }); }
 		void bind_at(std::size_t pos, const std::string_view& str);
 		void bind_at(std::size_t pos, std::int32_t val);
 		void bind_at(std::size_t pos, std::int64_t val);
@@ -191,8 +192,7 @@ namespace sqlite
 		T column_at(std::size_t pos)
 		{
 			if constexpr (std::is_same_v<T, std::string> || std::is_same_v<T, std::string_view>) {
-				auto str = column_text(pos);
-				return T{ str ? str : "" };
+				return T{ column_text_view(pos) };
 			}
 			else if constexpr (std::is_integral_v<T> && sizeof(T) <= sizeof(int))
 				return column_int(pos);
@@ -203,13 +203,14 @@ namespace sqlite
 		}
 
 		const char* column_text(std::size_t pos);
+		std::string_view column_text_view(std::size_t pos);
 		std::int32_t column_int(std::size_t pos);
 		std::int64_t column_int64(std::size_t pos);
 		double column_double(std::size_t pos);
 
 	private:
 		template<typename... T, std::size_t... I>
-		void set_from_columns(std::tuple<T...>& row, std::index_sequence<I...> index)
+		void set_from_columns(std::tuple<T...>& row, std::index_sequence<I...>)
 		{
 			row = std::make_tuple(column_at<T>(I)...);
 		}

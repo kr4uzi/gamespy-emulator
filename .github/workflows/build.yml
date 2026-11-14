@@ -1,0 +1,94 @@
+name: Build and test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.platform }} ${{ matrix.architecture }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2022
+            platform: windows
+            architecture: x64
+            preset: windows-x64
+          - runner: windows-11-arm
+            platform: windows
+            architecture: arm64
+            preset: windows-arm64
+          - runner: ubuntu-24.04
+            platform: linux
+            architecture: x64
+            preset: linux-x64
+          - runner: ubuntu-24.04-arm
+            platform: linux
+            architecture: arm64
+            preset: linux-arm64
+    env:
+      VCPKG_MAX_CONCURRENCY: 2
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Prepare Windows environment
+        if: matrix.platform == 'windows'
+        run: Add-Content -Path $env:GITHUB_ENV -Value "VCPKG_ROOT=$env:VCPKG_INSTALLATION_ROOT"
+
+      - name: Prepare Linux environment
+        if: matrix.platform == 'linux'
+        run: |
+          echo "VCPKG_ROOT=$VCPKG_INSTALLATION_ROOT" >> "$GITHUB_ENV"
+          echo "CXX=g++-14" >> "$GITHUB_ENV"
+
+      - name: Configure
+        run: cmake --preset ${{ matrix.preset }}
+
+      - name: Build
+        run: cmake --build --preset ${{ matrix.preset }} --parallel 2
+
+      - name: Test
+        run: ctest --preset ${{ matrix.preset }}
+
+      - name: Check memory safety
+        if: matrix.preset == 'linux-x64'
+        env:
+          ASAN_OPTIONS: detect_leaks=1:strict_string_checks=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: |
+          cmake --preset linux-x64 -B build/sanitized -DCMAKE_BUILD_TYPE=Debug -DGAMESPY_ENABLE_SANITIZERS=ON -DVCPKG_INSTALLED_DIR="$GITHUB_WORKSPACE/build/linux-x64/vcpkg_installed"
+          cmake --build build/sanitized --parallel 2
+          ctest --test-dir build/sanitized --output-on-failure
+
+      - name: Package
+        run: cmake --install build/${{ matrix.preset }} --config Release --prefix dist/package
+
+      - name: Archive Linux package
+        if: matrix.platform == 'linux'
+        run: tar -C dist/package -czf dist/gamespy-emulator-linux-${{ matrix.architecture }}.tar.gz .
+
+      - name: Upload Windows executable
+        if: matrix.platform == 'windows'
+        uses: actions/upload-artifact@v7
+        with:
+          name: gamespy-emulator-windows-${{ matrix.architecture }}
+          path: dist/package/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload Linux executable
+        if: matrix.platform == 'linux'
+        uses: actions/upload-artifact@v7
+        with:
+          name: gamespy-emulator-linux-${{ matrix.architecture }}
+          path: dist/*.tar.gz
+          if-no-files-found: error
+          retention-days: 30

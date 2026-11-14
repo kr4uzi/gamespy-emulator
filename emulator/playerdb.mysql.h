@@ -2,13 +2,12 @@
 #ifndef _GAMESPY_PLAYERDB_MYSQL_H_
 #define _GAMESPY_PLAYERDB_MYSQL_H_
 #include "playerdb.h"
-#include "asio.h"
-#include <boost/mysql.hpp>
+#include "mysql_pool.h"
 
 namespace gamespy {
 	class PlayerDBMySQL : public PlayerDB
 	{
-		boost::mysql::any_connection m_Conn;
+		boost::mysql::connection_pool m_Pool;
 		boost::mysql::connect_params m_Params;
 
 	public:

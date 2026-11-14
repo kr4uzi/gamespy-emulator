@@ -1,12 +1,13 @@
 #include "http.h"
+#include "sessions.h"
 #include "http.client.h"
 #include <print>
 #include "gamedb.h"
 
 using namespace gamespy;
 
-HttpServer::HttpServer(boost::asio::io_context& context, GameDB& gameDB, PlayerDB& playerDB)
-	: m_Acceptor{ context, boost::asio::ip::tcp::endpoint{ boost::asio::ip::tcp::v4(), 80 } }, m_GameDB{ gameDB }, m_PlayerDB{ playerDB }
+HttpServer::HttpServer(boost::asio::io_context& context, GameDB& gameDB, PlayerDB& playerDB, Sessions& sessions)
+	: m_Acceptor{ context, boost::asio::ip::tcp::endpoint{ boost::asio::ip::tcp::v4(), 80 } }, m_GameDB{ gameDB }, m_PlayerDB{ playerDB }, m_Sessions{ sessions }
 {
 	std::println("[http] starting up (battlefield 2 unlocker)");
 }
@@ -20,10 +21,11 @@ boost::asio::awaitable<void> HttpServer::AcceptClients()
 {
 	while (m_Acceptor.is_open()) {
 		auto [error, socket] = co_await m_Acceptor.async_accept(boost::asio::as_tuple(boost::asio::use_awaitable));
-		if (error)
-			break;
+		if (error == boost::asio::error::operation_aborted) co_return;
+		if (error == boost::asio::error::connection_aborted) continue;
+		if (error) throw boost::system::system_error{error};
 
-		boost::asio::co_spawn(m_Acceptor.get_executor(), HandleIncoming(std::move(socket)), boost::asio::detached);
+		m_Sessions.Spawn(HandleIncoming(std::move(socket)));
 	}
 }
 

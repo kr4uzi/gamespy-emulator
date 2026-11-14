@@ -1,8 +1,6 @@
 #include "qr.h"
-#include <print>
-#include <ranges>
+#include <algorithm>
 #include <utility>
-#include <iterator>
 using namespace gamespy;
 
 std::expected<QRPacket, QRPacket::ParseError> QRPacket::Parse(const std::span<const std::uint8_t>& buffer)
@@ -13,158 +11,99 @@ std::expected<QRPacket, QRPacket::ParseError> QRPacket::Parse(const std::span<co
 	if (buffer[0] > std::to_underlying(Type::prequery_ip_verify))
 		return std::unexpected(ParseError::unknown_type);
 
+	const auto type = static_cast<Type>(buffer[0]);
 	const auto data = buffer.subspan(5);
-	if (!data.empty() && data.back() != 0)
+	if ((!data.empty() && data.back() != 0)
+		|| (data.empty() && (type == Type::prequery_ip_verify || type == Type::challenge)))
 		return std::unexpected(ParseError::unexpected_end);
 
 	return QRPacket{
-		.type = static_cast<Type>(buffer[0]),
+		.type = type,
 		.instance = { buffer[1], buffer[2], buffer[3], buffer[4] },
 		.data = data
 	};
 }
 
-struct QRMap
-{
-	std::map<std::string_view, std::string_view> data;
+namespace {
+	using ParseError = QRPacket::ParseError;
 
-	template<typename Iter = std::forward_iterator_tag>
-	static std::expected<QRMap, QRPacket::ParseError> Parse(Iter& pos, const Iter& end)
+	std::expected<std::string_view, ParseError> ReadString(std::span<const std::uint8_t>& input)
 	{
-		using ParseError = QRPacket::ParseError;
-		if (pos == end)
+		const auto end = std::ranges::find(input, 0);
+		if (end == input.end())
+			return std::unexpected(ParseError::unexpected_end);
+
+		const auto size = static_cast<std::size_t>(end - input.begin());
+		const auto value = std::string_view{ reinterpret_cast<const char*>(input.data()), size };
+		input = input.subspan(size + 1);
+		return value;
+	}
+
+	struct Table {
+		std::vector<std::string_view> keys;
+		std::vector<std::vector<std::string_view>> rows;
+	};
+
+	std::expected<Table, ParseError> ReadTable(std::span<const std::uint8_t>& input)
+	{
+		if (input.size() < 2)
 			return std::unexpected(ParseError::too_small);
+		const auto count = (static_cast<std::uint16_t>(input[0]) << 8) | input[1];
+		input = input.subspan(2);
 
-		std::map<std::string_view, std::string_view> data;
-		std::string_view key;
-		while (pos != end) {
-			auto strEnd = std::find(pos, end, '\0');
-			if (strEnd == end)
-				return std::unexpected(ParseError::too_small);
-
-			auto str = std::string_view{ reinterpret_cast<const char*>(&*pos), reinterpret_cast<const char*>(&*strEnd) };
-			pos = strEnd + 1;
-
-			if (key.empty()) {
-				if (str.empty()) {
-					// empy string (indicates map is finished)
-					break;
-				}
-
-				std::swap(key, str);
-			}
-			else {
-				data.emplace(key, std::move(str));
-				key = std::string_view{};
-			}
+		Table table;
+		while (true) {
+			auto key = ReadString(input);
+			if (!key) return std::unexpected(key.error());
+			if (key->empty()) break;
+			table.keys.push_back(*key);
 		}
 
-		return QRMap{
-			.data = data
-		};
-	}
-};
-
-struct QRTable
-{
-	using row_t = std::vector<std::string_view>;
-	row_t header;
-	std::vector<row_t> rows;
-
-	template<typename Iter = std::forward_iterator_tag>
-	static std::expected<QRTable, QRPacket::ParseError> Parse(Iter& pos, const Iter& end, const std::string_view& headerEnd)
-	{
-		using ParseError = QRPacket::ParseError;
-		if (pos == end)
+		// Games may report a count without registering any player/team keys.
+		if (table.keys.empty()) return table;
+		// Every value needs at least its terminator. Check before allocating rows.
+		if (static_cast<std::size_t>(count) * table.keys.size() > input.size())
 			return std::unexpected(ParseError::too_small);
 
-		std::uint16_t count = *pos++ << 8;
-		if (pos == end)
-			return std::unexpected(ParseError::too_small);
-		count |= *pos++;
-		
-		bool headersParsed = false;
-		row_t headers;
-		std::vector<row_t> rows;
-
-		while (pos != end) {
-			auto columnEnd = std::find(pos, end, '\0');
-			if (columnEnd == end)
-				return std::unexpected(ParseError::too_small);
-
-			auto column = std::string_view{ reinterpret_cast<const char*>(&*pos), reinterpret_cast<const char*>(&*columnEnd) };
-			pos = columnEnd + 1;
-
-			if (!headersParsed && column.ends_with(headerEnd))
-				headers.push_back(std::move(column));
-			else {
-				if (headers.empty())
-					return std::unexpected(ParseError::unexpected_end);
-
-				// empty column indicates end of headers
-				if (column.empty()) {
-					headersParsed = true;
-					if (count == 0)
-						break;
-
-					continue;
-				}
-
-				if (rows.empty() || rows.back().size() == headers.size())
-					rows.emplace_back();
-
-				rows.back().push_back(std::move(column));
-
-				if (rows.size() == count && rows.back().size() == headers.size())
-					break;
+		for (int row = 0; row < count; ++row) {
+			auto& values = table.rows.emplace_back();
+			for (std::size_t column = 0; column < table.keys.size(); ++column) {
+				auto value = ReadString(input);
+				if (!value) return std::unexpected(value.error());
+				values.push_back(*value);
 			}
 		}
-
-		if (rows.size() < count || (!rows.empty() && rows.back().size() != headers.size()))
-			return std::unexpected(ParseError::too_small);
-
-		return QRTable{
-			.header = headers,
-			.rows = rows
-		};
+		return table;
 	}
-};
+}
 
 std::expected<QRHeartbeatPacket, QRPacket::ParseError> QRHeartbeatPacket::Parse(const QRPacket& packet)
 {
-	auto pos = packet.data.begin();
-	auto end = packet.data.end();
-
-	if (auto map = QRMap::Parse(pos, end); map) {
-		if (auto players = QRTable::Parse(pos, end, "_"); players) {
-			if (auto teams = QRTable::Parse(pos, end, "_t"); teams) {
-				return QRHeartbeatPacket{
-					packet.type,
-					packet.instance,
-					{},
-					map->data,
-					players->header,
-					players->rows,
-					teams->header,
-					teams->rows
-				};
-			}
-		}
-		else if (end == packet.data.end()) {
-			// heartbeat without players/teams is valid
-			return QRHeartbeatPacket{
-				packet.type,
-				packet.instance,
-				{},
-				map->data
-			};
-		}
+	auto input = packet.data;
+	std::map<std::string_view, std::string_view> serverData;
+	while (true) {
+		auto key = ReadString(input);
+		if (!key) return std::unexpected(key.error());
+		if (key->empty()) break;
+		auto value = ReadString(input);
+		if (!value) return std::unexpected(value.error());
+		serverData.emplace(*key, *value);
 	}
-	
-	return std::unexpected(QRPacket::ParseError::too_small);
-}
 
-namespace {
-#include <GameSpy/qr2/qr2.h>
-	static_assert(sizeof(QRPacket::instance) == REQUEST_KEY_LEN, "REQUEST_KEY_LEN value missmatch");
+	// A heartbeat can omit both tables, but a partially present table is invalid.
+	if (input.empty())
+		return QRHeartbeatPacket{ packet.type, packet.instance, {}, std::move(serverData) };
+
+	auto players = ReadTable(input);
+	if (!players) return std::unexpected(players.error());
+	auto teams = ReadTable(input);
+	if (!teams) return std::unexpected(teams.error());
+	if (!input.empty())
+		return std::unexpected(ParseError::unexpected_end);
+
+	return QRHeartbeatPacket{
+		packet.type, packet.instance, {}, std::move(serverData),
+		std::move(players->keys), std::move(players->rows),
+		std::move(teams->keys), std::move(teams->rows)
+	};
 }

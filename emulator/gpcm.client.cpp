@@ -4,17 +4,19 @@
 #include <format>
 #include <print>
 #include <chrono>
+#include <cctype>
 using namespace gamespy;
 using namespace std::string_literals;
 
 namespace {
+	// GameSpy GP protocol constants (GPIConnectData::serverChallenge and GP_LOGIN_TICKET_LEN).
 	constexpr std::size_t gamespy_server_challenge_length = 128;
 	constexpr std::size_t gamespy_login_ticket_length = 25;
 	constexpr std::size_t gamespy_recv_buffer_size = 2048;
 }
 
 LoginClient::LoginClient(boost::asio::ip::tcp::socket socket, PlayerDB& playerDB)
-	: m_Socket(std::move(socket)), m_HeartbeatTimer(m_Socket.get_executor()), m_PlayerDB(playerDB)
+	: m_Socket(std::move(socket)), m_PlayerDB(playerDB)
 {
 
 }
@@ -24,31 +26,13 @@ LoginClient::~LoginClient()
 
 }
 
-boost::asio::awaitable<void> LoginClient::KeepAliveClient()
-{
-	m_HeartbeatTimer = boost::asio::steady_timer(co_await boost::asio::this_coro::executor);
-	while (true) {
-		m_HeartbeatTimer.expires_after(std::chrono::seconds(60));
-		auto [error] = co_await m_HeartbeatTimer.async_wait(boost::asio::as_tuple(boost::asio::use_awaitable));
-		if (error) {
-			std::println("{}", error.what());
-			break;
-		}
-
-		auto heartBeat = std::format(R"(\lt\{}__\final\)", m_LoginTicket);
-		auto keepAlive = R"(\ka\\final\)";
-
-		co_await m_Socket.async_send(boost::asio::buffer(heartBeat + keepAlive), boost::asio::use_awaitable);
-	}
-}
-
 boost::asio::awaitable<void> LoginClient::SendChallenge()
 {
 	m_ServerChallenge = utils::random_string("ABCDEFGHIJKLMNOPQRSTUVWXYZ", ::gamespy_server_challenge_length - 1);
 	m_LoginTicket = utils::random_string("0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ][", ::gamespy_login_ticket_length - 3) + "__";
 
 	auto response = std::format(R"(\lc\1\challenge\{}\id\1\final\)", m_ServerChallenge);
-	co_await m_Socket.async_send(boost::asio::buffer(response), boost::asio::use_awaitable);
+	co_await boost::asio::async_write(m_Socket, boost::asio::buffer(response), boost::asio::use_awaitable);
 
 	m_State = STATES::AUTHENTICATING;
 }
@@ -71,24 +55,46 @@ boost::asio::awaitable<void> LoginClient::HandleLogin(const std::span<const char
 	}
 
 	std::string_view playerName;
-	if (uniqueNick)
+	std::optional<std::string_view> email;
+	std::string authIdentity;
+	if (uniqueNick) {
 		playerName = *uniqueNick;
-	else if (user)
-		playerName = *user; // <nick>@<email>
+		authIdentity = *uniqueNick;
+	}
+	else {
+		// SDK gpiSendLogin sends nick@email when there is no unique nickname.
+		const auto separator = user->find('@');
+		if (separator == std::string_view::npos) {
+			co_await SendError(requestId, 0, "Invalid Query!", true);
+			co_return;
+		}
+		playerName = user->substr(0, separator);
+		email = user->substr(separator + 1);
+		authIdentity = *user;
+	}
+	if (auto partner = utils::value_for_key(packet, "\\partnerid\\")) {
+		auto partnerId = utils::parse_uint32(*partner);
+		if (!partnerId) {
+			co_await SendError(requestId, 0, "Invalid partner ID!", true);
+			co_return;
+		}
+		if (*partnerId != 0) authIdentity = std::format("{}@{}", *partnerId, authIdentity);
+	}
 
 	if (playerName.empty()) {
 		co_await SendError(requestId, 0, "Invalid Query!", true);
 		co_return;
 	}
 
-	if (!co_await m_PlayerDB.HasPlayer(playerName)) {
+	const auto player = co_await m_PlayerDB.GetPlayerByName(playerName);
+	if (!player || (email && !std::ranges::equal(*email, player->email,
+		[](unsigned char left, unsigned char right) { return std::tolower(left) == std::tolower(right); }))) {
 		co_await SendError(requestId, 265, std::format("Username [{}] doesn't exist!", playerName), true);
 		std::println("[login] unknown user: {}", playerName);
 		co_return;
 	}
 
-	const auto& player = co_await m_PlayerDB.GetPlayerByName(playerName);
-	if (*challengeResponse != utils::generate_challenge(playerName, player->password, *clientChallenge, m_ServerChallenge)) {
+	if (*challengeResponse != utils::generate_challenge(authIdentity, player->password, *clientChallenge, m_ServerChallenge)) {
 		co_await SendError(requestId, 260, "The password provided is incorrect.", true);
 		std::println("[login] invalid password for user: {}", playerName);
 		co_return;
@@ -100,17 +106,15 @@ boost::asio::awaitable<void> LoginClient::HandleLogin(const std::span<const char
 	session.process_bytes(playerName.data(), playerName.length());
 	m_PlayerData->session = session.checksum();
 
-	auto proof = utils::generate_challenge(m_PlayerData->name, player->password, m_ServerChallenge, *clientChallenge);
-	auto response = std::format(R"(\lc\2\sesskey\{}\userid\{}\profileid\{}\uniquenick\{}\lt\{}\proof\{}\\id\{}\final\)",
+	auto proof = utils::generate_challenge(authIdentity, player->password, m_ServerChallenge, *clientChallenge);
+	auto response = std::format(R"(\lc\2\sesskey\{}\userid\{}\profileid\{}\uniquenick\{}\lt\{}\proof\{}\id\{}\final\)",
 		m_PlayerData->session, m_PlayerData->GetUserID(), m_PlayerData->GetProfileID(), player->name, m_LoginTicket, proof, requestId
 	);
-	co_await m_Socket.async_send(boost::asio::buffer(response), boost::asio::use_awaitable);
+	co_await boost::asio::async_write(m_Socket, boost::asio::buffer(response), boost::asio::use_awaitable);
 
 	m_State = STATES::AUTHENTICATED;
 	std::println("[login] authenticated user: {}", playerName);
 
-	// currently not doing keepalive / heartbeat handling as it seems unnecessary (there is no timeout in the default gamespy implementation)
-	//boost::asio::co_spawn(m_Socket.get_executor(), KeepAliveClient(), boost::asio::detached);
 }
 
 boost::asio::awaitable<void> LoginClient::HandleNewUser(const std::span<const char>& packet)
@@ -146,7 +150,7 @@ boost::asio::awaitable<void> LoginClient::HandleNewUser(const std::span<const ch
 		co_await m_PlayerDB.CreatePlayer(*m_PlayerData);
 
 		auto response = std::format(R"(\nur\\userid\{}\profileid\{}\id\1\final\)", m_PlayerData->GetUserID(), m_PlayerData->GetProfileID());
-		co_await m_Socket.async_send(boost::asio::buffer(response), boost::asio::use_awaitable);
+		co_await boost::asio::async_write(m_Socket, boost::asio::buffer(response), boost::asio::use_awaitable);
 		std::println("[login] created new user: {}", *nick);
 	}
 
@@ -187,7 +191,7 @@ boost::asio::awaitable<void> LoginClient::HandleUpdateProfile(const std::span<co
 
 	auto countryCode = utils::value_for_key<std::string>(packet, "\\countrycode\\");
 	if (countryCode) {
-		std::transform(countryCode->begin(), countryCode->end(), countryCode->begin(), ::toupper);
+		std::ranges::transform(*countryCode, countryCode->begin(), [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
 		m_PlayerData->country = *countryCode;
 		co_await m_PlayerDB.UpdatePlayer(*m_PlayerData);
 	}
@@ -228,7 +232,8 @@ boost::asio::awaitable<void> LoginClient::Process()
 			co_await HandleUpdateProfile(packet);
 		else if (buffer.starts_with("\\logout\\"))
 			co_await HandleLogout(packet);
-		else {
+		// GP/gpi.c sends keepalives that require only a TCP acknowledgement.
+		else if (!buffer.starts_with("\\ka\\")) {
 			std::println("[login] unhandled packet: {}", buffer);
 			co_await SendError(0, 0, "Invalid Query!");
 		}
@@ -249,7 +254,8 @@ boost::asio::awaitable<void> LoginClient::SendError(std::uint32_t requestId, std
 	}
 
 	response += std::format(R"(\id\{}\final\)", requestId);
-	co_await m_Socket.async_send(boost::asio::buffer(response), boost::asio::use_awaitable);
+	co_await boost::asio::async_write(m_Socket, boost::asio::buffer(response), boost::asio::use_awaitable);
+	if (fatal) m_Socket.close();
 }
 
 boost::asio::awaitable<void> LoginClient::SendPlayerData(std::uint32_t requestId)
@@ -258,22 +264,5 @@ boost::asio::awaitable<void> LoginClient::SendPlayerData(std::uint32_t requestId
 
 	auto response = std::format(R"(\pi\\profileid\{}\nick\{}\userid\{}\email\{}\sig\{}\uniquenick\{}\pid\0\firstname\\lastname\\countrycode\{}\birthday\{}\lon\0.000000\lat\0.000000\loc\\id\{}\final\)",
 		m_PlayerData->GetProfileID(), m_PlayerData->name, m_PlayerData->GetUserID(), m_PlayerData->email, m_LoginTicket, m_PlayerData->name, m_PlayerData->country, utils::to_date(std::chrono::sys_days{ 2014y / 05 / 31 }), requestId);
-	co_await m_Socket.async_send(boost::asio::buffer(response), boost::asio::use_awaitable);
+	co_await boost::asio::async_write(m_Socket, boost::asio::buffer(response), boost::asio::use_awaitable);
 }
-
-namespace {
-#ifdef __GNUC__
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-function"
-#endif
-#ifdef _HASHTABLE_H
-#  undef _HASHTABLE_H
-#endif
-#include <GameSpy/GP/gpi.h>
-#include <GameSpy/GP/gpiOperation.h>
-	static_assert(sizeof(GPIConnectData::serverChallenge) == ::gamespy_server_challenge_length, "serverChallenge length missmatch");
-	static_assert(GP_LOGIN_TICKET_LEN == gamespy_login_ticket_length, "GP_LOGIN_TICKET_LEN missmatch");
-}
-#ifdef __GNUC__
-#pragma GCC diagnostic pop
-#endif

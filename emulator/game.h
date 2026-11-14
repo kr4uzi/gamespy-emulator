@@ -11,6 +11,7 @@
 #include <string_view>
 #include <vector>
 #include <boost/signals2.hpp>
+#include <boost/beast/core/string.hpp>
 
 namespace gamespy {
 	struct GameData
@@ -43,8 +44,8 @@ namespace gamespy {
 
 		enum class Availability : std::uint8_t {
 			available = 0,
-			disabled_temporary = 1,
-			disabled_permanently = 2
+			disabled_temporary = 2,
+			disabled_permanently = 1
 		} availability = Availability::available;
 
 		enum class BackendOptions : std::uint16_t {
@@ -67,7 +68,9 @@ namespace gamespy {
 	{
 		sqlite::db m_DB; // stores added servers (in-memory)
 		GameData m_Data;
-		std::map<std::string_view, const GameData::GameKey*> m_Params; // references to m_Data.keys
+		// Indices stay valid when automatic keys grow m_Data.keys.
+		// SQLite column names are case-insensitive, even when quoted.
+		std::map<std::string, std::size_t, boost::beast::iless> m_Params;
 
 		// the (up to) 254 most frequently used values of the key-value pairs of the sever data can be
 		// stored here. instead of then sending the actual value, only the index within this array is sent.
@@ -85,7 +88,7 @@ namespace gamespy {
 			StringType private_ip;
 			std::uint16_t private_port = 0;
 			StringType icmp_ip;
-			std::map<std::string_view, StringType> data;
+			std::map<StringType, StringType> data;
 
 			// this can be used e.g. for highscore tracking
 			// (haven't really figured it out completely, but bf2 doesn't use it anyways)

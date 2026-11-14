@@ -29,7 +29,7 @@ namespace gamespy {
 	class GameDBInMemory : public GameDB
 	{
 		boost::asio::io_context& m_Context;
-		std::map<std::string_view, std::shared_ptr<Game>> m_Games;
+		std::map<std::string, std::shared_ptr<Game>, std::less<>> m_Games;
 		nlohmann::json m_Config;
 
 	public:

@@ -29,52 +29,44 @@ boost::asio::awaitable<void> MasterServer::Cleanup()
 {
 	while (true) {
 		m_CleanupTimer.expires_after(std::chrono::seconds{ 60 });
-		const auto& [error] = co_await m_CleanupTimer.async_wait(boost::asio::as_tuple);
+		const auto [error] = co_await m_CleanupTimer.async_wait(boost::asio::as_tuple);
 		if (error) break;
 
-		const auto& now = Clock::now();
-		for (auto& servers : std::array{ &m_AwaitingValidation, &m_Validated }) {
-			for (auto i = servers->begin(); i != servers->end(); ) {
-				auto timeSinceLastUpdate = std::chrono::duration_cast<std::chrono::seconds>(now - i->second.last_update);
-				if (timeSinceLastUpdate > std::chrono::seconds{ 60 }) {
-					std::println("[master][server][{}] {}:{} timed out", i->second.gamename, i->first.address().to_string(), i->first.port());
-					auto game = co_await m_DB.GetGame(i->second.gamename);
-					// not pusing into a outer vector because the remove servers expects a string_view which would be dangling after this iteration
-					auto addr = i->first.address().to_string();
-					co_await game->RemoveServers({ std::make_pair(addr, i->first.port()) });
-					i = servers->erase(i);
-				}
-				else
-					++i;
+		const auto now = Clock::now();
+		const auto expired = [&](const auto& entry) {
+			return now - entry.second.last_update > std::chrono::seconds{ 60 };
+		};
+		std::erase_if(m_AwaitingValidation, expired);
+
+		// Own expired records before awaiting: packet handlers also change these maps.
+		std::vector<std::pair<udp::endpoint, server>> removed;
+		for (auto it = m_Validated.begin(); it != m_Validated.end();) {
+			if (expired(*it)) {
+				removed.emplace_back(it->first, std::move(it->second));
+				it = m_Validated.erase(it);
 			}
+			else ++it;
+		}
+		for (const auto& [client, record] : removed) {
+			const auto address = client.address().to_string();
+			std::println("[master][server][{}] {}:{} timed out", record.gamename, address, client.port());
+			auto game = co_await m_DB.GetGame(record.gamename);
+			const std::vector<std::pair<std::string_view, std::uint16_t>> endpoints{ { address, client.port() } };
+			co_await game->RemoveServers(endpoints);
 		}
 	}
-	
 }
 
 boost::asio::awaitable<void> MasterServer::HandleAvailable(const udp::endpoint& client, QRPacket& packet)
 {
-	// this package is sent by clients and server to check if the gamespy endpoint is running
-	// the response contains a 32-bit status flag which containts only 3 possible status: 0 = available, 1 = unavailable, 2 = temporarily unavailable
-	// sample package: 0x09 0x00 0x00 0x00 0x00 0x62 0x61 0x74 0x74 0x6C 0x65 0x66 0x69 0x65 0x6C 0x64 0x32 0x00
-	//                      |  INSTANCE KEY   |  b    a    t    t    l    e    f    i    e    l    d    2      |
-	auto name = std::string_view{ reinterpret_cast<const char*>(packet.data.data()), packet.data.size() - 1 };
-	if (co_await m_DB.HasGame(name)) {
-		auto game = co_await m_DB.GetGame(name);
-		auto available = game->availability();
-		using Availability = decltype(available);
-		switch (available) {
-		case Availability::available:
-			co_await m_Socket.async_send_to(boost::asio::buffer("\xFE\xFD\x09\0\0\0\0"), client, boost::asio::use_awaitable);
-			break;
-		case Availability::disabled_temporary:
-			co_await m_Socket.async_send_to(boost::asio::buffer("\xFE\xFD\x09\0\0\0\1"), client, boost::asio::use_awaitable);
-			break;
-		case Availability::disabled_permanently:
-			co_await m_Socket.async_send_to(boost::asio::buffer("\xFE\xFD\x09\0\0\0\2"), client, boost::asio::use_awaitable);
-			break;
-		}
-	}
+	// QRPacket::Parse requires a terminated payload for availability requests.
+	const auto name = std::string_view{ reinterpret_cast<const char*>(packet.data.data()), packet.data.size() - 1 };
+	if (!co_await m_DB.HasGame(name)) co_return;
+	const auto game = co_await m_DB.GetGame(name);
+	const auto response = std::array<std::uint8_t, 7>{
+		0xFE, 0xFD, 0x09, 0, 0, 0, std::to_underlying(game->availability())
+	};
+	co_await m_Socket.async_send_to(boost::asio::buffer(response), client, boost::asio::use_awaitable);
 }
 
 boost::asio::awaitable<void> MasterServer::HandleHeartbeat(const udp::endpoint& client, QRPacket& _packet)
@@ -105,7 +97,36 @@ boost::asio::awaitable<void> MasterServer::HandleHeartbeat(const udp::endpoint& 
 	}
 
 	auto game = co_await m_DB.GetGame(gamename);
+	// qr2.c send_heartbeat(..., 2) is the server's explicit shutdown notice.
+	if (const auto changed = packet->serverData.find("statechanged");
+		changed != packet->serverData.end() && changed->second == "2") {
+		if (const auto waiting = m_AwaitingValidation.find(client); waiting != m_AwaitingValidation.end()
+			&& waiting->second.instance == packet->instance && waiting->second.gamename == gamename)
+			m_AwaitingValidation.erase(waiting);
+		if (const auto known = m_Validated.find(client); known != m_Validated.end()
+			&& known->second.instance == packet->instance && known->second.gamename == gamename) {
+			m_Validated.erase(known);
+			const auto address = client.address().to_string();
+			const std::vector<std::pair<std::string_view, std::uint16_t>> endpoints{ { address, client.port() } };
+			co_await game->RemoveServers(endpoints);
+		}
+		co_return;
+	}
+	if (auto known = m_Validated.find(client); known != m_Validated.end()
+		&& (known->second.gamename != gamename || known->second.instance != packet->instance)) {
+		// An endpoint reused by a restarted/different game must validate again.
+		auto previous = m_Validated.extract(known);
+		auto previousGame = co_await m_DB.GetGame(previous.mapped().gamename);
+		const auto address = client.address().to_string();
+		const std::vector<std::pair<std::string_view, std::uint16_t>> endpoints{ { address, client.port() } };
+		co_await previousGame->RemoveServers(endpoints);
+	}
+	if (auto waiting = m_AwaitingValidation.find(client); waiting != m_AwaitingValidation.end()
+		&& (waiting->second.gamename != gamename || waiting->second.instance != packet->instance))
+		m_AwaitingValidation.erase(waiting);
+
 	if (m_Validated.contains(client)) {
+		m_Validated.at(client).last_update = Clock::now();
 		auto addr = client.address().to_string();
 		auto server = Game::IncomingServer{
 			.last_update = Clock::now(),
@@ -116,16 +137,11 @@ boost::asio::awaitable<void> MasterServer::HandleHeartbeat(const udp::endpoint& 
 		co_await game->AddOrUpdateServer(server);
 	}
 	else if (!m_AwaitingValidation.contains(client)) {
-		// Note: The challenge needs to be even-sized so that the base64 encoding can be generated without padding
-		// This is required because the gamespy encoding is only base64-ish and handles the padding differently than regular base64 encoding
-		
-		// Note: query challenge is used to prevent id-spoofing but this isn't yet implemented
-		//enum BACKEND_OPTIONS : std::uint8_t {
-		//	QR2_USE_QUERY_CHALLENGE = 128
-		//} backendOptions{ 0 };
-		
+		if (m_AwaitingValidation.size() + m_Validated.size() >= MAX_SERVERS)
+			co_return;
+		// 21 bytes avoids padding in GameSpy's base64 variant.
 		auto challenge = utils::random_string("ABCDEFGHJIKLMNOPQRSTUVWXYZ123456789", 7);
-		auto responseData = std::format("{}{:2X}{:8X}{:4X}", challenge, std::to_underlying(game->backend()), client.address().to_v4().to_uint(), client.port());
+		auto responseData = std::format("{}{:02X}{:08X}{:04X}", challenge, std::to_underlying(game->backend()), client.address().to_v4().to_uint(), client.port());
 
 		std::vector<uint8_t> response;
 		response.push_back(0xFE);
@@ -153,52 +169,40 @@ boost::asio::awaitable<void> MasterServer::HandleHeartbeat(const udp::endpoint& 
 
 boost::asio::awaitable<void> MasterServer::HandleKeepAlive(const udp::endpoint& client, QRPacket& packet)
 {
-	// example packet: 0x08 (4-byte-instance-id) 0x00
-
-	if (m_AwaitingValidation.contains(client))
-		m_AwaitingValidation[client].last_update = Clock::now();
-	else if (m_Validated.contains(client))
-		m_Validated[client].last_update = Clock::now();
-	else
-		std::println("[master] received KEEPALIVE for unknown server {}:{}", client.address().to_string(), client.port());
-
-	co_return;
+	for (auto* records : { &m_AwaitingValidation, &m_Validated }) {
+		const auto found = records->find(client);
+		if (found != records->end() && found->second.instance == packet.instance) {
+			found->second.last_update = Clock::now();
+			co_return;
+		}
+	}
 }
 
 boost::asio::awaitable<void> MasterServer::HandleChallenge(const udp::endpoint& client, QRPacket& packet)
 {
-	auto iter = m_AwaitingValidation.find(client);
-	if (iter != m_AwaitingValidation.end()) {
-		const auto& challenge = std::string{ reinterpret_cast<const char*>(packet.data.data()) };
-		if (iter->second.proof == challenge) {
-			// Note: instance is currently ignored
-			m_Validated.emplace(client, iter->second);
+	// Extract the record so cleanup cannot invalidate it while a send suspends.
+	auto pending = m_AwaitingValidation.extract(client);
+	if (pending.empty()) co_return;
+	auto& record = pending.mapped();
+	const auto challenge = std::string_view{ reinterpret_cast<const char*>(packet.data.data()), packet.data.size() - 1 };
+	if (record.proof != challenge || record.instance != packet.instance) co_return;
 
-			std::vector<std::uint8_t> response;
-			response.push_back(0xFE);
-			response.push_back(0xFD);
-			response.push_back(0x0A);
-			response.append_range(iter->second.instance);
+	record.last_update = Clock::now();
+	const auto address = client.address().to_string();
+	auto incoming = Game::IncomingServer{
+		.last_update = record.last_update,
+		.public_ip = address,
+		.public_port = client.port(),
+		.data = { record.values.begin(), record.values.end() }
+	};
+	auto game = co_await m_DB.GetGame(record.gamename);
+	co_await game->AddOrUpdateServer(incoming);
+	m_Validated.insert_or_assign(client, record);
 
-			co_await m_Socket.async_send_to(boost::asio::buffer(response), client, boost::asio::use_awaitable);
-
-			auto addr = client.address().to_string();
-			auto server = Game::IncomingServer{
-				.last_update = iter->second.last_update,
-				.public_ip = addr,
-				.public_port = client.port(),
-				.data = std::map<std::string_view, std::string_view>{ std::from_range, iter->second.values }
-			};
-
-			auto game = co_await m_DB.GetGame(iter->second.gamename);
-			co_await game->AddOrUpdateServer(server);
-			std::println("[master][server][{}] {}:{} added", iter->second.gamename, server.public_ip, server.public_port);
-		}
-
-		m_AwaitingValidation.erase(iter);
-	}
-	else
-		std::println("[master] received challenge for an unknown server");
+	std::vector<std::uint8_t> response{ 0xFE, 0xFD, 0x0A };
+	response.append_range(record.instance);
+	co_await m_Socket.async_send_to(boost::asio::buffer(response), client, boost::asio::use_awaitable);
+	std::println("[master][server][{}] {}:{} added", record.gamename, address, client.port());
 }
 
 boost::asio::awaitable<void> MasterServer::Run()
@@ -213,7 +217,10 @@ boost::asio::awaitable<void> MasterServer::AcceptConnections()
 	while (m_Socket.is_open()) {
 		udp::endpoint client;
 		const auto& [error, length] = co_await m_Socket.async_receive_from(boost::asio::buffer(buff), client, boost::asio::as_tuple);
-		if (error || length == 0) break;
+		if (error == boost::asio::error::message_size) continue;
+		if (error == boost::asio::error::operation_aborted) co_return;
+		if (error) throw boost::system::system_error(error);
+		if (length == 0) continue;
 
 		try {
 			auto packet = QRPacket::Parse(std::span{ buff.data(), length });

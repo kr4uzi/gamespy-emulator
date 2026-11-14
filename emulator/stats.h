@@ -3,18 +3,20 @@
 #include <optional>
 
 namespace gamespy {
+	class Sessions;
 	class GameDB;
 	class PlayerDB;
 
 	class StatsServer {
 		static constexpr std::uint16_t PORT = 29920; // gamestats.gamespy.com, *s.gamestats.gamespy.com
 		boost::asio::ip::tcp::acceptor m_Acceptor;
+		Sessions& m_Sessions;
 		std::optional<boost::asio::ip::tcp::endpoint> m_SnapshotEndpoint;
 		GameDB& m_GameDB;
 		PlayerDB& m_PlayerDB;
 
 	public:
-		StatsServer(boost::asio::io_context& context, GameDB& gameDB, PlayerDB& playerDB, std::optional<boost::asio::ip::tcp::endpoint> snapshotEndpoint);
+		StatsServer(boost::asio::io_context& context, GameDB& gameDB, PlayerDB& playerDB, std::optional<boost::asio::ip::tcp::endpoint> snapshotEndpoint, Sessions& sessions);
 		~StatsServer();
 
 		boost::asio::awaitable<void> AcceptClients();

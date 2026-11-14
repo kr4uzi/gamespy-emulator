@@ -1,9 +1,8 @@
 #include "utils.h"
-#include "md5.h"
-#include <boost/archive/iterators/binary_from_base64.hpp>
-#include <boost/archive/iterators/base64_from_binary.hpp>
-#include <boost/archive/iterators/transform_width.hpp>
-#include <boost/algorithm/string.hpp>
+#include <openssl/evp.h>
+#include <algorithm>
+#include <limits>
+#include <stdexcept>
 #include <random>
 #include <sstream>
 #include <ranges>
@@ -36,24 +35,42 @@ namespace {
 	}
 }
 
-std::string utils::base64_encode(const std::string& data) {
-	using namespace boost::archive::iterators;
-	using It = base64_from_binary<transform_width<std::string::const_iterator, 6, 8>>;
-	auto tmp = std::string(It(std::begin(data)), It(std::end(data)));
-	return tmp.append((3 - data.size() % 3) % 3, '=');
+std::string utils::base64_encode(const std::string& data)
+{
+	if (data.size() > static_cast<std::size_t>(std::numeric_limits<int>::max() / 4) * 3)
+		throw std::length_error{ "base64 input too large" };
+	std::string result(4 * ((data.size() + 2) / 3) + 1, '\0');
+	auto size = EVP_EncodeBlock(reinterpret_cast<unsigned char*>(result.data()),
+		reinterpret_cast<const unsigned char*>(data.data()), static_cast<int>(data.size()));
+	result.resize(size);
+	return result;
 }
 
-//http://stackoverflow.com/a/28471421
-std::string utils::base64_decode(const std::string& data) {
-	using namespace boost::archive::iterators;
-	using It = transform_width<binary_from_base64<std::string::const_iterator>, 8, 6>;
-	return boost::algorithm::trim_right_copy_if(std::string(It(std::begin(data)), It(std::end(data))), [](char c) {
-		return c == '\0';
-	});
+std::string utils::base64_decode(const std::string& data)
+{
+	if (data.empty()) return {};
+	if (data.size() % 4 != 0 || data.size() > static_cast<std::size_t>(std::numeric_limits<int>::max()))
+		throw std::invalid_argument{ "invalid base64 length" };
+	const auto padding = data.ends_with("==") ? 2u : data.ends_with('=') ? 1u : 0u;
+	const auto encoded = std::string_view{data}.substr(0, data.size() - padding);
+	if (!std::ranges::all_of(encoded, [](unsigned char c) {
+		return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')
+			|| (c >= '0' && c <= '9') || c == '+' || c == '/';
+	}))
+		throw std::invalid_argument{ "invalid base64 character" };
+
+	std::string result(data.size() / 4 * 3, '\0');
+	const auto size = EVP_DecodeBlock(reinterpret_cast<unsigned char*>(result.data()),
+		reinterpret_cast<const unsigned char*>(data.data()), static_cast<int>(data.size()));
+	if (size < 0) throw std::invalid_argument{ "invalid base64 data" };
+	// Remove padding only: zero bytes are valid encrypted password data.
+	result.resize(static_cast<std::size_t>(size) - padding);
+	return result;
 }
 
 std::string utils::random_string(const std::string& table, std::string::size_type len)
 {
+	if (table.empty()) throw std::invalid_argument{ "empty random alphabet" };
 	thread_local auto rng = random_generator<>();
 	auto dist = std::uniform_int_distribution{ {}, table.length() - 1 };
 	auto result = std::string(len, '\0');
@@ -71,14 +88,15 @@ std::string utils::encode(const std::string_view& key, std::string message)
 		sbox[i] = static_cast<std::uint8_t>(i);
 
 	auto keyLength = key.length();
+	if (keyLength == 0) throw std::invalid_argument{ "empty challenge key" };
 	for (std::uint16_t i = 0, j = 0; i < sbox.size(); i++) {
-		j = (j + sbox[i] + key[i % keyLength]) % sbox.size();
+		j = (j + sbox[i] + static_cast<unsigned char>(key[i % keyLength])) % sbox.size();
 		std::swap(sbox[i], sbox[j]);
 	}
 
 	std::uint16_t i = 0, j = 0;
 	for (auto& c : message) {
-		i = (i + c + 1) % sbox.size(); // deviation to RC4
+		i = (i + static_cast<unsigned char>(c) + 1) % sbox.size(); // deviation to RC4
 		j = (j + sbox[i]) % sbox.size();
 		std::swap(sbox[i], sbox[j]);
 		c ^= sbox[(sbox[i] + sbox[j]) % sbox.size()];
@@ -118,14 +136,23 @@ std::string utils::generate_challenge(const std::string_view& name, const std::s
 
 std::string utils::md5(const std::string_view& text)
 {
-	//const ::md5 hash(text.begin(), text.end());
-	const ::md5 hash(std::begin(text), std::end(text));
-	return hash.hex_digest<std::string>();
+	std::array<unsigned char, EVP_MAX_MD_SIZE> digest{};
+	unsigned int length = 0;
+	if (EVP_Digest(text.data(), text.size(), digest.data(), &length, EVP_md5(), nullptr) != 1 || length != 16)
+		throw std::runtime_error{ "MD5 is unavailable (required by the GameSpy protocol)" };
+	constexpr std::string_view hex = "0123456789abcdef";
+	std::string result(length * 2, '\0');
+	for (unsigned int i = 0; i < length; ++i) {
+		result[i * 2] = hex[digest[i] >> 4];
+		result[i * 2 + 1] = hex[digest[i] & 15];
+	}
+	return result;
 }
 
 template<>
 std::optional<std::string_view> utils::value_for_key(const std::span<const char>& _textPacket, const std::string_view& key)
 {
+	if (key.empty()) return std::nullopt;
 	auto packet = std::string_view{ _textPacket.data(), _textPacket.size() };
 	auto start = packet.find(key);
 	if (start == std::string_view::npos)
@@ -194,6 +221,7 @@ Clock::time_point utils::from_date(std::uint32_t gsDate)
 
 std::optional<std::uint32_t> utils::parse_uint32(const std::string_view& str)
 {
+	if (str.empty()) return std::nullopt;
 	std::uint32_t result;
 	auto end = str.data() + str.size();
 	auto [ptr, ec] = std::from_chars(str.data(), end, result);

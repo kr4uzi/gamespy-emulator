@@ -17,6 +17,7 @@ namespace gamespy {
 	// - endpoint to register game servers (master.gamepsy.com)
 	class MasterServer {
 		static constexpr std::uint16_t PORT = 27900;
+		static constexpr std::size_t MAX_SERVERS = 4096;
 
 		boost::asio::ip::udp::socket m_Socket;
 		GameDB& m_DB;

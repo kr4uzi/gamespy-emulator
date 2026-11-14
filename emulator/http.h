@@ -4,6 +4,7 @@
 #include "asio.h"
 
 namespace gamespy {
+	class Sessions;
 	class GameDB;
 	class PlayerDB;
 	
@@ -11,9 +12,10 @@ namespace gamespy {
 		boost::asio::ip::tcp::acceptor m_Acceptor;
 		GameDB& m_GameDB;
 		PlayerDB& m_PlayerDB;
+		Sessions& m_Sessions;
 
 	public:
-		HttpServer(boost::asio::io_context& context, GameDB& gameDB, PlayerDB& playerDB);
+		HttpServer(boost::asio::io_context& context, GameDB& gameDB, PlayerDB& playerDB, Sessions& sessions);
 		~HttpServer();
 
 		boost::asio::awaitable<void> AcceptClients();

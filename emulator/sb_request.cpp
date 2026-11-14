@@ -1,6 +1,7 @@
 #include "sb_request.h"
 #include "game.h"
 #include <array>
+#include <bit>
 #include <utility>
 #include <limits>
 #include <charconv>
@@ -44,14 +45,25 @@ namespace {
 		if (std::distance(start, end) < 4)
 			return std::unexpected(ServerListRequest::ParseError::insufficient_length);
 
-		return static_cast<std::uint32_t>((*start++ << 24) | (*start++ << 16) | (*start++ << 8) | *start++);
+		std::uint32_t value = 0;
+		for (int byte = 0; byte < 4; ++byte)
+			value = (value << 8) | *start++;
+		return value;
+	}
+
+	// SBServerListConnectAndQuery uses little endian for version/result count,
+	// but network byte order for options and alternate IP (sb_serverlist.c).
+	auto ExtractUInt32LE(PacketIterator& start, const PacketIterator& end)
+	{
+		return ExtractUInt32(start, end).transform([](auto value) { return std::byteswap(value); });
 	}
 
 	auto ExtractOptions(PacketIterator& start, const PacketIterator& end)
 	{
 		return ExtractUInt32(start, end).and_then([](auto value) -> std::expected<ServerListRequest::Options, ServerListRequest::ParseError> {
-			if (value == 0) return static_cast<ServerListRequest::Options>(0);
-			if (std::to_underlying(ServerListRequest::Options::min) <= value && value <= std::to_underlying(ServerListRequest::Options::max))
+			// Options are a bitmask; combinations can exceed the highest single flag.
+			constexpr std::uint32_t knownOptions = 1 | 2 | 4 | 8 | 32 | 64 | 128;
+			if ((value & ~knownOptions) == 0)
 				return static_cast<ServerListRequest::Options>(value);
 
 			return std::unexpected(ServerListRequest::ParseError::invalid_key);
@@ -61,7 +73,8 @@ namespace {
 	auto ExtractFieldList(PacketIterator& start, const PacketIterator& end)
 	{
 		return ExtractString(start, end, ::fields_total_length).and_then([](auto fieldStr) -> std::expected<std::vector<std::string_view>, ServerListRequest::ParseError> {
-			if (fieldStr.empty() || fieldStr.front() != '\\')
+			if (fieldStr.empty()) return std::vector<std::string_view>{};
+			if (fieldStr.front() != '\\')
 				return std::unexpected(ServerListRequest::ParseError::invalid_key);
 
 			auto fields = std::vector<std::string_view>{};
@@ -69,7 +82,11 @@ namespace {
 				| std::views::split('\\')
 				| std::views::transform([](const auto& range) { return std::string_view{ range.begin(), range.end() }; });
 
-			fields.insert(fields.end(), std::make_move_iterator(fieldNames.begin()), std::make_move_iterator(fieldNames.end()));
+			for (auto field : fieldNames) {
+				if (!Game::IsValidParamName(field))
+					return std::unexpected(ServerListRequest::ParseError::invalid_key);
+				fields.push_back(field);
+			}
 			return fields;
 		});
 	}
@@ -88,7 +105,7 @@ namespace {
 	std::expected<std::optional<std::uint32_t>, ServerListRequest::ParseError> ExtractLimit(PacketIterator& start, const PacketIterator& end, ServerListRequest::Options options)
 	{
 		if (options & ServerListRequest::Options::limit_result_count) {
-			return ExtractUInt32(start, end).transform([](auto limit) {
+			return ExtractUInt32LE(start, end).transform([](auto limit) {
 				return std::make_optional(limit);
 			});
 		}
@@ -102,7 +119,7 @@ std::expected<ServerListRequest, ServerListRequest::ParseError> ServerListReques
 	constexpr auto MIN_SIZE =
 		1ull /* protocol */ + 1ull /* encoding */ + 4ull /* gameversion (integer) */ +
 		2ull /* from-gamename (min 1 byte + terminator) */ + 2ull /* to-gamename */ +
-		client_challenge_length /* client challenge */ + 1ull /* query */ + 3ull /* field list (\\-prefix + 1 byte + terminator) */ +
+		client_challenge_length /* client challenge */ + 1ull /* query */ + 1ull /* field list (can be empty) */ +
 		4ull /* options (integer) */; 
 	
 	if (packet.size() < MIN_SIZE)
@@ -119,30 +136,42 @@ std::expected<ServerListRequest, ServerListRequest::ParseError> ServerListReques
 	if (encoding != ::list_encoding_version)
 		return std::unexpected(ParseError::unknown_encoding_version);
 	
-	return ExtractUInt32(it, end).and_then([&](auto gameversion) {
-	return ExtractString(it, end).and_then([&](auto fromGame) {
-	return ExtractString(it, end).and_then([&](auto toGame) {
-	return ExtractSpan<client_challenge_length>(it, end).and_then([&](auto challenge) {
-	return ExtractString(it, end, ::filter_total_length).and_then([&](auto serverFilter) {
-	return ExtractFieldList(it, end).and_then([&](auto fieldList) {
-	return ExtractOptions(it, end).and_then([&](auto options) {
-	return ExtractAlternateIP(it, end, options).and_then([&](auto alternateIP) {
-	return ExtractLimit(it, end, options).transform([&](auto limit) {
-		// TODO: check if it == end (only then this packet is fully parsed)
-		return ServerListRequest{
-			.protocolVersion = protocol,
-			.encodingVersion = encoding,
-			.fromGameVersion = gameversion,
-			.fromGame = std::move(fromGame),
-			.toGame = std::move(toGame),
-			.challenge = std::move(challenge),
-			.serverFilter = std::move(serverFilter),
-			.fieldList = std::move(fieldList),
-			.options = options,
-			.alternateSourceIP = std::move(alternateIP),
-			.limitResultCount = std::move(limit)
-		};
-	}); }); }); }); }); }); }); }); });
+	auto gameversion = ExtractUInt32LE(it, end);
+	if (!gameversion) return std::unexpected(gameversion.error());
+	auto toGame = ExtractString(it, end);
+	if (!toGame) return std::unexpected(toGame.error());
+	auto fromGame = ExtractString(it, end);
+	if (!fromGame) return std::unexpected(fromGame.error());
+	if (fromGame->empty() || toGame->empty())
+		return std::unexpected(ParseError::invalid_key);
+	auto challenge = ExtractSpan<client_challenge_length>(it, end);
+	if (!challenge) return std::unexpected(challenge.error());
+	auto serverFilter = ExtractString(it, end, ::filter_total_length);
+	if (!serverFilter) return std::unexpected(serverFilter.error());
+	auto fieldList = ExtractFieldList(it, end);
+	if (!fieldList) return std::unexpected(fieldList.error());
+	auto options = ExtractOptions(it, end);
+	if (!options) return std::unexpected(options.error());
+	auto alternateIP = ExtractAlternateIP(it, end, *options);
+	if (!alternateIP) return std::unexpected(alternateIP.error());
+	auto limit = ExtractLimit(it, end, *options);
+	if (!limit) return std::unexpected(limit.error());
+	if (it != end)
+		return std::unexpected(ParseError::invalid_key);
+
+	return ServerListRequest{
+		.protocolVersion = protocol,
+		.encodingVersion = encoding,
+		.fromGameVersion = *gameversion,
+		.fromGame = *fromGame,
+		.toGame = *toGame,
+		.challenge = *challenge,
+		.serverFilter = *serverFilter,
+		.fieldList = std::move(*fieldList),
+		.options = *options,
+		.alternateSourceIP = *alternateIP,
+		.limitResultCount = *limit
+	};
 }
 
 std::vector<std::uint8_t> ServerListRequest::GetResponseHeaderBytes(const Game& forGame, const boost::asio::ip::address_v4& socketIP) const
@@ -157,7 +186,7 @@ std::vector<std::uint8_t> ServerListRequest::GetResponseHeaderBytes(const Game& 
 	});
 
 	if (queryPort == std::numeric_limits<decltype(queryPort)>::max()) {
-		response.append_range("Game does not support multiplayer!");
+		response.append_range(std::string_view{ "Game does not support multiplayer!" });
 		response.push_back(0);
 	}
 
@@ -244,7 +273,7 @@ namespace
 		}
 
 		const auto& popularValues = game.GetPopularValues();
-		if (!server.data.empty())
+		if (!fieldList.empty())
 			bytes.front() |= ServerOptions::has_keys;
 
 		for (const auto& key : fieldList) {
@@ -252,7 +281,10 @@ namespace
 			auto sendAs = game.GetParamSendType(key);
 			using SendType = decltype(sendAs);
 
-			const auto& value = server.data.contains(key) ? server.data.at(key) : T{};
+			auto entry = server.data.find(T{ key });
+			if (entry == server.data.end())
+				entry = std::ranges::find_if(server.data, [&](const auto& field) { return boost::beast::iequals(field.first, key); });
+			const std::string_view value = entry == server.data.end() ? std::string_view{} : entry->second;
 			switch (sendAs) {
 			case SendType::as_string:
 			{
@@ -260,12 +292,13 @@ namespace
 				if (usePopularList) {
 					auto popularValuePos = std::ranges::find(popularValues, value);
 					if (popularValuePos != popularValues.end()) {
-						bytes.push_back(static_cast<std::uint8_t>(std::ranges::distance(popularValuePos, popularValues.end())));
+						bytes.push_back(static_cast<std::uint8_t>(std::ranges::distance(popularValues.begin(), popularValuePos)));
 						break;
 					}
 				}
 
-				bytes.push_back(0xFF);
+				// ParseServer(..., usepopularlist=0) reads pushed strings directly.
+				if (usePopularList) bytes.push_back(0xFF);
 				bytes.append_range(value);
 				bytes.push_back(0x00);
 				break;
@@ -331,30 +364,4 @@ std::vector<std::uint8_t> ServerListRequest::GetServerBytes(const Game& game, co
 std::vector<std::uint8_t> ServerListRequest::GetServerBytes(const Game& game, const Game::SavedServer& server, const std::vector<std::string_view>& fieldList, bool usePopularList)
 {
 	return ::PrepareServer(game, server, fieldList, usePopularList);
-}
-
-namespace {
-#ifdef _HASHTABLE_H
-#  undef _HASHTABLE_H
-#endif
-#include <GameSpy/serverbrowsing/sb_internal.h>
-	static_assert(::list_protocol_version == LIST_PROTOCOL_VERSION, "LIST_PROTOCOL_VERSION value missmatch");
-	static_assert(::list_encoding_version == LIST_ENCODING_VERSION, "LIST_ENCODING_VERSION value missmatch");
-
-	// check Request Options bounds
-	static_assert(std::to_underlying(ServerBrowsingPacket::Type::min) == SERVER_LIST_REQUEST, "SERVER_LIST_REQUEST value missmatch");
-	static_assert(std::to_underlying(ServerBrowsingPacket::Type::max) == PLAYERSEARCH_REQUEST, "PLAYERSEARCH_REQUEST value missmatch");
-
-	static_assert(decltype(ServerListRequest::challenge)::extent == LIST_CHALLENGE_LEN, "the crypt key length must match the gamespy definition");
-
-	// check ServerListRequest Options bounds
-	static_assert(std::to_underlying(ServerListRequest::Options::min) == SEND_FIELDS_FOR_ALL, "SEND_FIELDS_FOR_ALL value missmatch");
-	static_assert(std::to_underlying(ServerListRequest::Options::max) == LIMIT_RESULT_COUNT, "SEND_FIELDS_FOR_ALL value missmatch");
-
-	// check Server Options bounds
-	static_assert(std::to_underlying(::ServerOptions::min) == UNSOLICITED_UDP_FLAG, "UNSOLICITED_UDP_FLAG value missmatch");
-	static_assert(std::to_underlying(::ServerOptions::max) == HAS_FULL_RULES_FLAG, "HAS_FULL_RULES_FLAG value missmatch");
-
-	static_assert(::fields_total_length >= MAX_FIELD_LIST_LEN, "fields_total_length must be greater than or equal to MAX_FIELD_LIST_LEN");
-	static_assert(::filter_total_length >= MAX_FILTER_LEN, "filter_total_length must be greater than or equal to MAX_FILTER_LEN");
 }

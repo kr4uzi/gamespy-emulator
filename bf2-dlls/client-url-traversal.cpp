@@ -3,6 +3,7 @@
 #include <type_traits>
 #include <GameSpy/ghttp/ghttp.h>
 #include <detours.h>
+#include "download_path.h"
 
 LONG g_detours_error = 0;
 
@@ -35,8 +36,8 @@ typedef add_fast_call<decltype(ghttpSaveEx)> bf2_ghttpSaveEx_t;
 auto bf2_ghttpSaveEx = reinterpret_cast<bf2_ghttpSaveEx_t>(0x59BD00);
 
 GHTTPRequest __fastcall patched_ghttpSaveEx(const gsi_char* URL, const gsi_char* filename, const gsi_char* headers, GHTTPPost post, GHTTPBool throttle, GHTTPBool blocking, ghttpProgressCallback progressCallback, ghttpCompletedCallback completedCallback, void* param) {
-    if (std::string_view(filename).contains("..")) {
-        std::println("[gamespy] directory traversal attempt prevented {}", filename);
+    if (!filename || !gamespy::is_relative_download_path(filename)) {
+        std::println("[gamespy] invalid download path prevented {}", filename ? filename : "(null)");
         return GHTTPInvalidURL;
     }
 

@@ -1,39 +1,51 @@
 #include "asio.h"
 #include "emulator.h"
-#include <string_view>
 #include <csignal>
 #include <iostream>
 #include <print>
 
-int main(int argc, char *argv[])
+int main(int argc, char* argv[])
 {
 	try {
-		auto context = boost::asio::io_context{};
-		auto signals = boost::asio::signal_set{ context, SIGINT, SIGTERM };
-		signals.async_wait([&](auto, auto) {
+		boost::asio::io_context context;
+		gamespy::Emulator emulator{ context };
+		boost::asio::cancellation_signal shutdown;
+		boost::asio::signal_set signals{ context, SIGINT, SIGTERM };
+		bool stopping = false;
+		int result = 0;
+		signals.async_wait([&](auto error, auto) {
+			if (error) return;
+			stopping = true;
 			std::println("SHUTDOWN REQUESTED");
-			context.stop();
+			emulator.Stop();
+			shutdown.emit(boost::asio::cancellation_type::all);
 		});
 
-		auto emulator = gamespy::Emulator{ context };
-		boost::asio::co_spawn(context, emulator.Launch(argc, argv), [&](std::exception_ptr ex) {
-			if (ex) {
-				try {
-					std::rethrow_exception(ex);
-				}
-				catch (std::exception& e) {
-					std::println(std::cerr, "[exception] {}", e.what());
-					context.stop();
-				}
+		auto report = [&](std::exception_ptr error) {
+			if (!error) return;
+			try {
+				std::rethrow_exception(error);
+			} catch (const boost::system::system_error& e) {
+				if (stopping && e.code() == boost::asio::error::operation_aborted) return;
+				std::println(std::cerr, "[ERR] {}", e.what());
+			} catch (const std::exception& e) {
+				std::println(std::cerr, "[ERR] {}", e.what());
 			}
-		});
-
+			result = 1;
+		};
+		boost::asio::co_spawn(context, emulator.Launch(argc, argv),
+			boost::asio::bind_cancellation_slot(shutdown.slot(), [&](std::exception_ptr error) {
+				report(error);
+				boost::asio::co_spawn(context, emulator.Shutdown(), [&](std::exception_ptr cleanupError) {
+					report(cleanupError);
+					signals.cancel();
+				});
+			}));
+		// Drain canceled sessions before destroying their servers and databases.
 		context.run();
-	}
-	catch (std::exception& e) {
+		return result;
+	} catch (const std::exception& e) {
 		std::println(std::cerr, "[ERR] {}", e.what());
 		return 1;
 	}
-
-	return 0;
 }

@@ -22,7 +22,7 @@ namespace gamespy {
 
 	private:
 		boost::asio::awaitable<void> HandleSearchNicks(const std::span<const char>& packet);
-		boost::asio::awaitable<void> HandleProfileExists(const std::span<const char>& packet);
+		boost::asio::awaitable<void> HandleCheck(const std::span<const char>& packet);
 
 		boost::asio::awaitable<void> SendError(std::uint32_t errorCode, const std::string_view& message, bool fatal = false);
 	};

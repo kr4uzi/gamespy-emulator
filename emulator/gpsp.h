@@ -3,16 +3,18 @@
 #include "asio.h"
 
 namespace gamespy {
+	class Sessions;
 	class PlayerDB;
 
 	// gpsp = gamespy search player
 	class SearchServer {
 		static constexpr boost::asio::ip::port_type PORT = 29901; // gpsp.gamespy.com
 		boost::asio::ip::tcp::acceptor m_Acceptor;
+		Sessions& m_Sessions;
 		PlayerDB& m_DB;
 
 	public:
-		SearchServer(boost::asio::io_context& context, PlayerDB& db);
+		SearchServer(boost::asio::io_context& context, PlayerDB& db, Sessions& sessions);
 		~SearchServer();
 
 		boost::asio::awaitable<void> AcceptClients();

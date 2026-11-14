@@ -1,9 +1,11 @@
 #include "game.h"
 #include <print>
 #include <iostream>
+#include <set>
 using namespace gamespy;
 
 namespace {
+	// GameSpy serverbrowsing wire constants (sb_internal.h).
 	constexpr auto gamespy_num_master_servers = 20;
 	constexpr auto gamespy_max_registered_keys = 254;
 	constexpr auto gamespy_max_popular_values = 255;
@@ -43,7 +45,7 @@ Game::~Game()
 
 task<void> Game::Connect()
 {
-	// note: no sql injection prevention for config (static or via ini-file) based initalization
+	decltype(m_Params) params;
 	std::string sql = R"SQL(
 		CREATE TABLE server(
 			__last_update DATETIME DEFAULT (unixepoch()),
@@ -55,17 +57,18 @@ task<void> Game::Connect()
 		if (!IsValidParamName(key.name))
 			throw std::runtime_error{ std::format("parameter name {} is not allowed", key.name) };
 
-		m_Params.emplace(key.name, &key);
+		if (!params.emplace(key.name, params.size()).second)
+			throw std::invalid_argument{ "duplicate game key" };
 		using StoreType = decltype(key.store);
 		switch (key.store) {
 		case StoreType::as_text:
-			sql += std::format(",{} TEXT", key.name);
+			sql += std::format(",\"{}\" TEXT", key.name);
 			break;
 		case StoreType::as_real:
-			sql += std::format(",{} REAL DEFAULT 0.00", key.name);
+			sql += std::format(",\"{}\" REAL DEFAULT 0.00", key.name);
 			break;
 		case StoreType::as_integer:
-			sql += std::format(",{} INTEGER DEFAULT 0", key.name);
+			sql += std::format(",\"{}\" INTEGER DEFAULT 0", key.name);
 			break;
 		default:
 			throw std::runtime_error{ std::format("parameter {} of invalid type {}", key.name, static_cast<int>(key.send)) };
@@ -82,6 +85,7 @@ task<void> Game::Connect()
 	)SQL";
 
 	m_DB.exec(sql);
+	m_Params.swap(params);
 	std::println("[{}] registered - {}", name(), GetMasterServer());
 	co_return;
 }
@@ -98,7 +102,7 @@ std::string Game::GetMasterServer() const
 
 	auto hashcode = std::uint32_t{ 0 };
 	for (const auto& c : m_Data.name)
-		hashcode = hashcode * PRIME + std::tolower(c);
+		hashcode = hashcode * PRIME + std::tolower(static_cast<unsigned char>(c));
 
 	return std::format("{}.ms{}.gamespy.com", m_Data.name, hashcode % ::gamespy_num_master_servers);
 }
@@ -115,12 +119,12 @@ bool Game::IsValidParamName(const std::string_view& paramName)
 		return false;
 
 	// First character must be a letter or underscore
-	if (!std::isalpha(paramName[0]) && paramName[0] != '_')
+	if (!std::isalpha(static_cast<unsigned char>(paramName[0])) && paramName[0] != '_')
 		return false;
 
 	// Remaining characters must be alphanumeric or underscore
 	for (const auto& c : paramName) {
-		if (!std::isalnum(c) && c != '_')
+		if (!std::isalnum(static_cast<unsigned char>(c)) && c != '_')
 			return false;
 	}
 
@@ -133,7 +137,7 @@ auto Game::GetParamSendType(const std::string_view& keyName) const -> KeyType::S
 	if (iter == m_Params.end())
 		return KeyType::Send::as_string;
 
-	return iter->second->send;
+	return m_Data.keys[iter->second].send;
 }
 
 auto Game::GetParamStoreType(const std::string_view& keyName) const -> KeyType::Store
@@ -142,7 +146,7 @@ auto Game::GetParamStoreType(const std::string_view& keyName) const -> KeyType::
 	if (iter == m_Params.end())
 		return KeyType::Store::as_text;
 
-	return iter->second->store;
+	return m_Data.keys[iter->second].store;
 }
 
 task<void> Game::AddOrUpdateServer(IncomingServer& server)
@@ -154,7 +158,10 @@ task<void> Game::AddOrUpdateServer(IncomingServer& server)
 	auto insertSQL = std::string{ "INSERT OR REPLACE INTO server (__public_ip, __public_port" };
 	std::vector<std::string_view> columnsToAdd;
 	std::vector<std::string_view> valuesToInsert;
+	std::set<std::string_view, boost::beast::iless> columnNames;
 	for (const auto& [key, value] : server.data) {
+		if (!columnNames.insert(key).second)
+			throw std::invalid_argument{ "duplicate server key (case-insensitive)" };
 		auto insertKeyValue = false;
 		if (m_Params.contains(key))
 			insertKeyValue = true;
@@ -163,12 +170,13 @@ task<void> Game::AddOrUpdateServer(IncomingServer& server)
 				throw std::runtime_error{ std::format("illegal column name: {}", key) };
 
 			columnsToAdd.push_back(key);
+			insertKeyValue = true;
 		}
 		else
 			std::println("[{}] ignoring unknown key: {}", m_Data.name, key);
 
 		if (insertKeyValue) {
-			insertSQL += std::format(",{}", key);
+			insertSQL += std::format(",\"{}\"", key);
 			valuesToInsert.push_back(value);
 		}
 	}
@@ -178,56 +186,49 @@ task<void> Game::AddOrUpdateServer(IncomingServer& server)
 		insertSQL += ",?";
 	insertSQL += ')';
 
-	if (!columnsToAdd.empty()) {
-		auto columnSQL = std::string{};
-		for (const auto& column : columnsToAdd) {
-			std::println("[gamedb][{}] new column: {}", m_Data.name, column);
-			if (m_Data.misssingKeyPolicy == GameData::MissingKeyPolicy::add_as_string)
-				columnSQL += std::format("ALTER TABLE server ADD COLUMN {} TEXT DEFAULT '';", column);
-			else
-				throw std::runtime_error{ std::format("unknown policy for adding new columns: {}", std::to_underlying(m_Data.misssingKeyPolicy)) };
-		}
+	const auto insert = [&] {
+		auto stmt = sqlite::stmt{ m_DB, insertSQL };
+		stmt.bind_at(1, server.public_ip);
+		stmt.bind_at(2, server.public_port);
+		for (std::size_t i = 0; i < valuesToInsert.size(); ++i)
+			stmt.bind_at(i + 3, valuesToInsert[i]);
+		stmt.insert();
+	};
 
-		auto guard = m_DB.set_scoped_authorizer([&](auto action, auto detail1, auto detail2, auto dbName, auto trigger) {
-			using auth_action = sqlite::auth_action;
-			using auth_res = sqlite::auth_res;
-			if (action == auth_action::SQLITE_ALTER_TABLE && (detail1 == "temp" || detail1 == "main") && detail2 == "server")
-				return auth_res::SQLITE_OK;
-			else if (action == auth_action::SQLITE_FUNCTION
-				&& (detail2 == "printf" || detail2 == "substr" || detail2 == "length"))
-				return auth_res::SQLITE_OK;
-			else if (action == auth_action::SQLITE_READ
-				&& (detail1 == "sqlite_temp_master" || detail1 == "sqlite_master")
-				&& (detail2 == "sql" || detail2 == "temp" || detail2 == "name" || detail2 == "type")
-				&& (dbName == "temp" || dbName == "main"))
-				return auth_res::SQLITE_OK;
-			else if (action == auth_action::SQLITE_UPDATE
-				&& (detail1 == "sqlite_temp_master" || detail1 == "sqlite_master")
-				&& detail2 == "sql"
-				&& (dbName == "temp" || dbName == "main"))
-				return auth_res::SQLITE_OK;
-
-			std::println(std::cerr, "[{}][columns] unauthorized: action({}) detail1({}), detail2({}), db({}), trigger({})", name(), std::to_underlying(action), detail1, detail2, dbName, trigger);
-			// this will make the stmt throw an error
-			return sqlite::auth_res::SQLITE_DENY;
-		});
-
-		m_DB.exec(columnSQL);
-
-		for (const auto& column : columnsToAdd) {
-			const auto& key = m_Data.keys.emplace_back(std::string(column));
-			m_Params.emplace(key.name, &key);
-		}
+	if (columnsToAdd.empty()) {
+		insert();
 	}
+	else {
+		if (m_Data.keys.size() + columnsToAdd.size() > gamespy_max_registered_keys)
+			throw std::overflow_error{ "too many keys" };
 
-	auto stmt = sqlite::stmt{ m_DB, insertSQL };
-	stmt.bind_at(1, server.public_ip);
-	stmt.bind_at(2, server.public_port);
+		// Allocate replacement metadata before changing SQL. Swapping it after
+		// COMMIT cannot fail, so schema, row and metadata advance together.
+		auto keys = m_Data.keys;
+		auto params = m_Params;
+		std::string columnSQL;
+		for (const auto& column : columnsToAdd) {
+			const auto index = keys.size();
+			keys.emplace_back(std::string(column));
+			params.emplace(column, index);
+			columnSQL += std::format("ALTER TABLE server ADD COLUMN \"{}\" TEXT DEFAULT '';", column);
+		}
 
-	for (decltype(valuesToInsert)::size_type i = 0, size = valuesToInsert.size(); i < size; i++)
-		stmt.bind_at(i + 3, valuesToInsert[i]);
-
-	stmt.insert();
+		// Names are validated and quoted; values are bound parameters. Only the
+		// user-supplied query expression needs a restricted SQL authorizer.
+		m_DB.exec("BEGIN");
+		try {
+			m_DB.exec(columnSQL);
+			insert();
+			m_DB.exec("COMMIT");
+		}
+		catch (...) {
+			m_DB.exec("ROLLBACK");
+			throw;
+		}
+		m_Data.keys.swap(keys);
+		m_Params.swap(params);
+	}
 
 	OnServerAdded(server);
 
@@ -240,8 +241,13 @@ task<std::vector<Game::SavedServer>> Game::GetServers(const std::string_view& qu
 	auto error = std::string{};
 
 	auto sql = std::string{ "SELECT __last_update,__public_ip,__public_port" };
-	for (const auto& field : fields)
-		sql += std::format(",{}", field);
+	for (const auto& field : fields) {
+		if (!IsValidParamName(field))
+			throw std::invalid_argument{ "invalid server field name" };
+		// Qualifying the name also avoids SQLite treating an unknown quoted
+		// identifier as a string literal.
+		sql += std::format(",server.\"{}\"", field);
+	}
 
 	// the scoped authorizer prevents SQL injection
 	auto guard = m_DB.set_scoped_authorizer([&](auto action, auto detail1, auto detail2, auto dbName, auto trigger) {
@@ -251,7 +257,9 @@ task<std::vector<Game::SavedServer>> Game::GetServers(const std::string_view& qu
 			return auth_res::SQLITE_OK; // maybe we need to prevent queries on local{ip\d+|port} columns (=detail2)?
 		else if (action == auth_action::SQLITE_SELECT)
 			return auth_res::SQLITE_OK;
-		else if (action == auth_action::SQLITE_FUNCTION && (detail2 == "like"))
+		// SQLite may revalidate the table's DEFAULT expression after ALTER TABLE.
+		// Allow its unixepoch() alongside the LIKE operator used by filters.
+		else if (action == auth_action::SQLITE_FUNCTION && (detail2 == "like" || detail2 == "unixepoch"))
 			return auth_res::SQLITE_OK;
 
 		std::println(std::cerr, "[{}][retrieve] unauthorized: action({}) detail1({}), detail2({}), db({}), trigger({})", name(), std::to_underlying(action), detail1, detail2, dbName, trigger);
@@ -280,7 +288,7 @@ task<std::vector<Game::SavedServer>> Game::GetServers(const std::string_view& qu
 			};
 
 			for (std::size_t i = 0, size = fields.size(); i < size; i++)
-				server.data.emplace(fields[i], stmt.column_at<std::string>(i + 3));
+				server.data.emplace(std::string(fields[i]), stmt.column_at<std::string>(i + 3));
 
 			servers.push_back(server);
 		}
@@ -310,23 +318,4 @@ void Game::CheckPopularValueSize(std::size_t newSize)
 {
 	if (newSize > gamespy_max_popular_values)
 		throw std::overflow_error{ "too many popular values" };
-}
-
-namespace {
-	// verify the gamespy invariants at the bottom of the file so it doesn't pollute the rest of the file
-#ifdef _HASHTABLE_H
-#  undef _HASHTABLE_H
-#endif
-	
-	#include <GameSpy/serverbrowsing/sb_internal.h>
-	static_assert(::gamespy_num_master_servers == NUM_MASTER_SERVERS, "NUM_MASTER_SERVERS value missmatch");
-	static_assert(::gamespy_max_registered_keys == MAX_REGISTERED_KEYS, "MAX_REGISTERED_KEYS value missmatch");
-	static_assert(::gamespy_max_popular_values == MAX_POPULAR_VALUES, "MAX_POPULAR_VALUES value missmatch");
-
-	static_assert(KEYTYPE_STRING == std::to_underlying(Game::KeyType::Send::as_string), "KEYTYPE_STRING missmatch");
-	static_assert(KEYTYPE_BYTE == std::to_underlying(Game::KeyType::Send::as_byte), "KEYTYPE_BYTE missmatch");
-	static_assert(KEYTYPE_SHORT == std::to_underlying(Game::KeyType::Send::as_short), "KEYTYPE_SHORT missmatch");
-
-	// check Backend Options bounds
-	static_assert(std::to_underlying(GameData::BackendOptions::qr2_use_query_challenge) == QR2_USE_QUERY_CHALLENGE, "QR2_USE_QUERY_CHALLENGE value missmatch");
 }

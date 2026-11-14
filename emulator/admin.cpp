@@ -2,6 +2,8 @@
 #include "game.h"
 #include "playerdb.h"
 #include "admin.h"
+#include "sessions.h"
+#include "utils.h"
 #include <print>
 #include <utility>
 #include <map>
@@ -23,16 +25,6 @@ namespace net = boost::asio;
 using tcp = boost::asio::ip::tcp;
 
 namespace {
-	auto parseInt(const std::string_view& str) -> std::optional<std::uint32_t>
-	{
-		auto begin = str.data();
-		auto end = begin + str.size();
-		std::uint32_t value;
-		if (std::from_chars(begin, end, value).ptr != end)
-			return std::nullopt;
-		return value;
-	}
-
 	beast::string_view mimeType(beast::string_view path)
 	{
 		using beast::iequals;
@@ -69,14 +61,14 @@ namespace {
 
 class AdminClient
 {
-	tcp::socket m_Socket;
+	beast::tcp_stream m_Stream;
 	GameDB& m_GameDB;
 	PlayerDB& m_PlayerDB;
-	std::string_view m_Auth;
+	std::string m_Auth;
 
 public:
 	AdminClient(tcp::socket socket, GameDB& gameDB, PlayerDB &playerDB, std::string_view auth)
-		: m_Socket(std::move(socket)), m_GameDB(gameDB), m_PlayerDB(playerDB), m_Auth(auth)
+		: m_Stream(std::move(socket)), m_GameDB(gameDB), m_PlayerDB(playerDB), m_Auth(auth)
 	{
 
 	}
@@ -86,7 +78,7 @@ public:
 
 	}
 
-	boost::asio::awaitable<void> SendResponse(const http::request<http::dynamic_body>& request, http::status status, std::optional<nlohmann::json> body = {})
+	boost::asio::awaitable<void> SendResponse(const http::request<http::string_body>& request, http::status status, std::optional<nlohmann::json> body = {})
 	{
 		auto response = http::response<http::string_body>{};
 		response.result(status);
@@ -97,22 +89,27 @@ public:
 			response.body() = body->dump();
 		}
 
-		co_await http::async_write(m_Socket, response, boost::asio::use_awaitable);
+		response.prepare_payload();
+		co_await http::async_write(m_Stream, response, boost::asio::use_awaitable);
 	}
 
-	net::awaitable<bool> HandleAPI(const http::request<http::dynamic_body>& request, const boost::core::string_view& path, const boost::urls::params_view& params)
+	net::awaitable<void> SendError(const http::request<http::string_body>& request, http::status status, std::string message)
+	{
+		auto body = nlohmann::json{{"error", std::move(message)}};
+		co_await SendResponse(request, status, std::move(body));
+	}
+
+	net::awaitable<bool> HandleAPI(const http::request<http::string_body>& request, const boost::core::string_view& path, const boost::urls::params_view& params)
 	{
 		auto method = request.method();
 		if (path == "/api/games") {
 			if (method != http::verb::get) {
-				co_await SendResponse(request, http::status::bad_request, { {"error", "invalid http method"} });
+				co_await SendError(request, http::status::bad_request, "invalid http method");
 				co_return false;
 			}
 
 			nlohmann::json games = nlohmann::json::array();
 			for (const auto& game : co_await m_GameDB.GetGames()) {
-				using StoreType = GameData::GameKey::Store;
-				using SendType = GameData::GameKey::Send;
 				nlohmann::json params = nlohmann::json::array();
 
 				for (const auto& param : game->keys())
@@ -135,32 +132,36 @@ public:
 
 		// all other api calls require a game parameter
 		if (!params.contains("game")) {
-			co_await SendResponse(request, http::status::bad_request, { {"error", "missing game parameter"} });
+			co_await SendError(request, http::status::bad_request, "missing game parameter");
 			co_return false;
 		}
 
 		auto game = co_await m_GameDB.GetGame((*params.find("game"))->value);
 		if (!game) {
-			co_await SendResponse(request, http::status::bad_request, { {"error", "unknown game"} });
+			co_await SendError(request, http::status::bad_request, "unknown game");
 			co_return false;
 		}
 
 		if (path == "/api/servers") {
 			if (request.method() != http::verb::get) {
-				co_await SendResponse(request, http::status::bad_request, { {"error", "invalid http method"} });
+				co_await SendError(request, http::status::bad_request, "invalid http method");
 				co_return false;
 			}
 
 			auto query = params.contains("query") ? (*params.find("query"))->value : "";
-			auto limit = params.contains("limit") ? *parseInt((*params.find("limit"))->value) : 100;
-			auto skip = params.contains("skip") ? *parseInt((*params.find("skip"))->value) : 0;
+			auto limit = params.contains("limit") ? utils::parse_uint32((*params.find("limit"))->value) : std::optional<std::uint32_t>{100};
+			auto skip = params.contains("skip") ? utils::parse_uint32((*params.find("skip"))->value) : std::optional<std::uint32_t>{0};
+			if (!limit || *limit == 0 || *limit > 1000 || !skip) {
+				co_await SendError(request, http::status::bad_request, "limit must be 1..1000 and skip a nonnegative integer");
+				co_return false;
+			}
 
 			std::vector<std::string> fields;
 			if (auto _fields = params.find("fields"); _fields != params.end() && (*_fields)->has_value)
 				fields = (*_fields)->value | std::views::split(',') | std::ranges::to<std::vector<std::string>>();
 
 			nlohmann::json servers = nlohmann::json::array();
-			for (const auto& server : co_await game->GetServers(query, fields | std::ranges::to<std::vector<std::string_view>>(), limit, skip)) {
+			for (const auto& server : co_await game->GetServers(query, fields | std::ranges::to<std::vector<std::string_view>>(), *limit, *skip)) {
 				nlohmann::json data;
 				for (const auto& [name, key] : server.data)
 					data[name] = key;
@@ -175,13 +176,20 @@ public:
 		}
 		else if (path == "/api/server") {
 			if (!params.contains("ip") || !params.contains("port")) {
-				co_await SendResponse(request, http::status::bad_request, { {"error", "missing ip or port parameter"} });
+				co_await SendError(request, http::status::bad_request, "missing ip or port parameter");
 				co_return false;
 			}
 
-			auto port = parseInt((*params.find("port"))->value);
-			if (!port) {
-				co_await SendResponse(request, http::status::bad_request, { {"error", "invalid port parameter"} });
+			auto port = utils::parse_uint32((*params.find("port"))->value);
+			if (!port || *port == 0 || *port > 65535) {
+				co_await SendError(request, http::status::bad_request, "invalid port parameter");
+				co_return false;
+			}
+
+			boost::system::error_code addressError;
+			boost::asio::ip::make_address_v4(std::string{(*params.find("ip"))->value}, addressError);
+			if (addressError) {
+				co_await SendError(request, http::status::bad_request, "invalid IPv4 address");
 				co_return false;
 			}
 
@@ -203,16 +211,20 @@ public:
 				};
 
 				co_await game->AddOrUpdateServer(server);
-				co_await SendResponse(request, http::status::ok, nlohmann::json{ {"status", "success"}, {"message", "added server"} });
+				auto response = nlohmann::json{{"status", "success"}, {"message", "added server"}};
+				co_await SendResponse(request, http::status::ok, std::move(response));
 				co_return true;
 			}
 			else if (request.method() == http::verb::delete_) {
-				co_await game->RemoveServers({ { (*params.find("ip"))->value, static_cast<std::uint16_t>(*port) } });
-				co_await SendResponse(request, http::status::ok, nlohmann::json{ {"status", "success"}, {"message", "removed server"} });
+				const std::string ip{(*params.find("ip"))->value};
+				const std::vector<std::pair<std::string_view, std::uint16_t>> servers{{ip, static_cast<std::uint16_t>(*port)}};
+				co_await game->RemoveServers(servers);
+				auto response = nlohmann::json{{"status", "success"}, {"message", "removed server"}};
+				co_await SendResponse(request, http::status::ok, std::move(response));
 				co_return true;
 			}
 			
-			co_await SendResponse(request, http::status::bad_request, { {"error", "invalid http method"} });
+			co_await SendError(request, http::status::bad_request, "invalid http method");
 			co_return false;
 		}
 
@@ -220,7 +232,7 @@ public:
 		co_return false;
 	}
 
-	net::awaitable<bool> HandleFileLookup(const http::request<http::dynamic_body>& request, const std::string_view& path)
+	net::awaitable<bool> HandleFileLookup(const http::request<http::string_body>& request, const std::string_view& path)
 	{
 		std::error_code fsErr;
 		const auto root = std::filesystem::weakly_canonical(std::filesystem::absolute("http"), fsErr);
@@ -242,7 +254,7 @@ public:
 		http::file_body::value_type body;
 		body.open(filePath.string().c_str(), boost::beast::file_mode::scan, fileErr);
 		if (fileErr) {
-			co_await SendResponse(request, http::status::internal_server_error, { {"error", "failed to open file"} });
+			co_await SendError(request, http::status::internal_server_error, "failed to open file");
 			co_return false;
 		}
 
@@ -255,29 +267,36 @@ public:
 		res.set(http::field::content_type, ::mimeType(filePath.string()));
 		res.content_length(size);
 		res.keep_alive(false);
-		co_await http::async_write(m_Socket, res, net::use_awaitable);
+		co_await http::async_write(m_Stream, res, net::use_awaitable);
 		co_return true;
 	}
 
 	net::awaitable<void> Run()
 	{
-		auto addr = m_Socket.remote_endpoint().address();
+		auto addr = m_Stream.socket().remote_endpoint().address();
 
-		// there should not be no operation taking longer than 10 seconds
-		auto timeout = boost::asio::system_timer{ m_Socket.get_executor(), std::chrono::seconds(10) };
-		timeout.async_wait([&](const auto& ec) {
-			if (ec) return;
-			std::println("[admin] connection {} timed out", addr.to_string());
-			m_Socket.close();
-		});
-
-		auto buffer = beast::flat_buffer{ 8192 };
-		auto request = http::request<http::dynamic_body>{};
-		const auto& [error, length] = co_await http::async_read(m_Socket, buffer, request, net::as_tuple);
+		m_Stream.expires_after(std::chrono::seconds(10));
+		auto buffer = beast::flat_buffer{8192};
+		http::request_parser<http::string_body> parser;
+		parser.header_limit(8192);
+		parser.body_limit(8192);
+		auto [error, length] = co_await http::async_read(m_Stream, buffer, parser, net::as_tuple(net::use_awaitable));
 		if (error) co_return;
+		auto request = parser.release();
+
+		// Browser-originated writes must come from this admin UI. CLI clients may omit Origin.
+		if (request.method() != http::verb::get && request.method() != http::verb::head) {
+			const auto origin = request.find(http::field::origin);
+			const auto expectedOrigin = std::string{"http://"} + std::string{request[http::field::host]};
+			if (beast::iequals(request["Sec-Fetch-Site"], "cross-site")
+				|| (origin != request.end() && !beast::iequals(origin->value(), expectedOrigin))) {
+				co_await SendError(request, http::status::forbidden, "cross-origin writes are not allowed");
+				co_return;
+			}
+		}
 
 		// only host itself is allowed to bypass authentication
-		if (!addr.is_loopback() && addr != m_Socket.local_endpoint().address()) {
+		if (!addr.is_loopback() && addr != m_Stream.socket().local_endpoint().address()) {
 			auto auth = request.find(http::field::authorization);
 			if (auth == request.end() || auth->value() != m_Auth) {
 				std::println("[admin] unauthorized access attempt from {}", addr.to_string());
@@ -286,7 +305,8 @@ public:
 				response.set(http::field::www_authenticate, "Basic realm=\"Authentication required\"");
 				response.version(request.version());
 				response.keep_alive(false);
-				co_await http::async_write(m_Socket, response, boost::asio::use_awaitable);
+				response.prepare_payload();
+				co_await http::async_write(m_Stream, response, boost::asio::use_awaitable);
 				co_return;
 			}
 
@@ -294,6 +314,10 @@ public:
 		}
 
 		auto uri = boost::urls::parse_origin_form(request.target());
+		if (!uri) {
+			co_await SendError(request, http::status::bad_request, "invalid request target");
+			co_return;
+		}
 		auto path = uri->path();
 		auto params = uri->params();
 		
@@ -304,8 +328,8 @@ public:
 	}
 };
 
-AdminServer::AdminServer(boost::asio::io_context& context, GameDB& gameDB, PlayerDB& playerDB, const std::string& username, const std::string& password, boost::asio::ip::port_type port)
-	: m_Acceptor(context, tcp::v6()), m_GameDB(gameDB), m_PlayerDB(playerDB)
+AdminServer::AdminServer(boost::asio::io_context& context, GameDB& gameDB, PlayerDB& playerDB, const std::string& username, const std::string& password, boost::asio::ip::port_type port, Sessions& sessions)
+	: m_Acceptor(context, tcp::v6()), m_GameDB(gameDB), m_PlayerDB(playerDB), m_Sessions(sessions)
 {
 	m_Acceptor.set_option(tcp::acceptor::reuse_address(true));
 	if (username.empty() || password.empty()) {
@@ -332,10 +356,11 @@ boost::asio::awaitable<void> AdminServer::AcceptClients()
 {
 	while (m_Acceptor.is_open()) {
 		auto [error, socket] = co_await m_Acceptor.async_accept(net::as_tuple);
-		if (error)
-			break;
+		if (error == boost::asio::error::operation_aborted) co_return;
+		if (error == boost::asio::error::connection_aborted) continue;
+		if (error) throw boost::system::system_error{error};
 
-		net::co_spawn(m_Acceptor.get_executor(), HandleIncoming(std::move(socket)), net::detached);
+		m_Sessions.Spawn(HandleIncoming(std::move(socket)));
 	}
 }
 

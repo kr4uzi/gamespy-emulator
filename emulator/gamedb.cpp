@@ -1,6 +1,7 @@
 #include "gamedb.h"
 #include "game.h"
 #include "bf2.h"
+#include <set>
 using namespace gamespy;
 
 GameDB::GameDB()
@@ -126,7 +127,8 @@ task<bool> GameDBInMemory::HasGame(const std::string_view& name)
 
 task<std::shared_ptr<Game>> GameDBInMemory::GetGame(const std::string_view& name)
 {
-	co_return m_Games.at(name);
+	const auto found = m_Games.find(name);
+	co_return found == m_Games.end() ? nullptr : found->second;
 }
 
 task<std::vector<std::shared_ptr<Game>>> GameDBInMemory::GetGames()
@@ -140,5 +142,35 @@ task<std::vector<std::shared_ptr<Game>>> GameDBInMemory::GetGames()
 
 bool GameDBInMemory::ValidateConfig(const nlohmann::json& config)
 {
+	if (!config.is_array()) return false;
+	std::set<std::string> names;
+	try {
+		for (const auto& entry : config) {
+			const auto name = entry.at("name").get<std::string>();
+			if (name.empty() || name.find('\0') != std::string::npos || !names.insert(name).second)
+				return false;
+			if (name == "battlefield2") {
+				for (const auto* key : { "mysql-host", "mysql-username", "mysql-password", "mysql-database" })
+					if (!entry.at(key).is_string()) return false;
+				if (entry.at("mysql-host").get_ref<const std::string&>().empty()) return false;
+				const auto& port = entry.at("mysql-port");
+				if (!port.is_number_integer() || port < 1 || port > 65535) return false;
+			}
+			else {
+				if (entry.at("secretKey").get<std::string>().empty() || !entry.at("autoKeys").is_boolean())
+					return false;
+				for (const auto* list : { "keys", "sendAsShort", "sendAsByte", "saveAsReal", "ignoredKeys" }) {
+					const auto& keys = entry.at(list);
+					if (!keys.is_array()) return false;
+					std::set<std::string, boost::beast::iless> distinct;
+					for (const auto& key : keys) {
+						const auto value = key.get<std::string>();
+						if (!Game::IsValidParamName(value) || !distinct.insert(value).second) return false;
+					}
+				}
+			}
+		}
+	}
+	catch (const nlohmann::json::exception&) { return false; }
 	return true;
 }

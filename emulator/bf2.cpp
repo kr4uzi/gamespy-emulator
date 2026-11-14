@@ -125,14 +125,14 @@ const auto bf2Data = GameData{
 	}
 };
 
-BF2::BF2(net::io_context& context)
-	: Game{ bf2Data }, m_Conn{ context }
+BF2::BF2(net::io_context&)
+	: Game{ bf2Data }
 {
 
 }
 
 BF2::BF2(net::io_context& context, boost::mysql::connect_params params)
-	: Game{ bf2Data }, m_Conn{ context }, m_Params(std::move(params))
+	: Game{ bf2Data }, m_Params(std::move(params)), m_Pool(std::in_place, context, mysql_pool_params(*m_Params))
 {
 
 }
@@ -152,12 +152,15 @@ task<void> BF2::Connect()
 	}
 
 	std::println("[bf2] connecting to {}:{} db={}", std::string(m_Params->server_address.hostname()), m_Params->server_address.port(), m_Params->database);
-	co_await m_Conn.async_connect(*m_Params);
+	m_Pool->async_run(net::detached);
+	auto connection = co_await mysql_connection(*m_Pool);
 }
 
 task<void> BF2::Disconnect()
 {
-	co_await m_Conn.async_close(net::use_awaitable);
+	if (m_Pool)
+		m_Pool->cancel();
+	co_await Game::Disconnect();
 }
 
 task<void> BF2::AddOrUpdateServer(IncomingServer& server)
@@ -201,7 +204,9 @@ task<std::vector<Game::SavedServer>> BF2::GetServers(const std::string_view& _qu
 	if (!m_Params || servers.size() == 0)
 		co_return servers;
 
-	auto stmt = co_await m_Conn.async_prepare_statement(R"(
+	auto connection = co_await mysql_connection(*m_Pool);
+	boost::mysql::results result;
+	co_await connection->async_execute(R"(
 		SELECT
 			server.ip as ip,
 			server.queryport as port,
@@ -209,14 +214,11 @@ task<std::vector<Game::SavedServer>> BF2::GetServers(const std::string_view& _qu
 		FROM server
 		JOIN stats_provider ON stats_provider.id = server.provider_id
 		WHERE stats_provider.authorized = 1
-	)", net::use_awaitable);
-
-	boost::mysql::results result;
-	co_await m_Conn.async_execute(stmt.bind(), result, net::use_awaitable);
+	)", result, net::use_awaitable);
 	auto rankedServers = std::map<std::pair<std::string, std::uint16_t>, bool>{};
 	for (const auto& row : result.rows()) {
-		auto conn = std::make_pair(row.at(0).as_string(), static_cast<std::uint16_t>(row.at(1).as_uint64()));
-		rankedServers.emplace(conn, !!row.at(2).as_int64());
+		auto conn = std::make_pair(row.at(0).as_string(), static_cast<std::uint16_t>(mysql_unsigned(row.at(1))));
+		rankedServers.emplace(conn, mysql_unsigned(row.at(2)) != 0);
 	}
 
 	for (auto& server : servers) {

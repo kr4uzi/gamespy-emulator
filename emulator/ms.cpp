@@ -1,11 +1,12 @@
+#include "sessions.h"
 #include "ms.h"
 #include "ms.client.h"
 #include <print>
 #include <utility>
 using namespace gamespy;
 
-BrowserServer::BrowserServer(boost::asio::io_context& context, GameDB& db)
-	: m_Acceptor(context, boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v4(), PORT)),  m_DB(db)
+BrowserServer::BrowserServer(boost::asio::io_context& context, GameDB& db, Sessions& sessions)
+	: m_Acceptor(context, boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v4(), PORT)), m_Sessions(sessions), m_DB(db)
 {
 	std::println("[browser] starting up: {} TCP", PORT);
 	std::println("[browser] (%s.ms%d.gamespy.com)");
@@ -20,10 +21,10 @@ boost::asio::awaitable<void> BrowserServer::AcceptClients()
 {
 	while (m_Acceptor.is_open()) {
 		auto [error, socket] = co_await m_Acceptor.async_accept(boost::asio::as_tuple(boost::asio::use_awaitable));
-		if (error)
-			break;
+		if (error == boost::asio::error::operation_aborted) co_return;
+		if (error) throw boost::system::system_error(error);
 
-		boost::asio::co_spawn(m_Acceptor.get_executor(), HandleIncoming(std::move(socket)), boost::asio::detached);
+		m_Sessions.Spawn(HandleIncoming(std::move(socket)));
 	}
 }
 

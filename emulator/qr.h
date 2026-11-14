@@ -38,12 +38,6 @@ namespace gamespy {
 
 		static std::expected<QRPacket, ParseError> Parse(const std::span<const std::uint8_t>& buffer);
 
-	protected:
-		/*QRPacket(Type type, decltype(instance) instance, decltype(data) data)
-			: type{ type }, instance{ instance }, data{ data }
-		{
-
-		}*/
 	};
 
 	struct QRHeartbeatPacket : QRPacket
@@ -60,10 +54,5 @@ namespace gamespy {
 		using QRPacket::Parse;
 		using QRPacket::data;
 
-		/*QRHeartbeatPacket(Type type, decltype(instance) instance, decltype(server) server, decltype(playerKeys) playerKeys, decltype(playerValues) playerValues, decltype(teamKeys) teamKeys, decltype(teamValues) teamValues)
-			: QRPacket{ type, instance, {} }, server{ server }, playerKeys{ playerKeys }, playerValues{ playerValues }, teamKeys{ teamKeys }, teamValues{ teamValues }
-		{
-
-		}*/
 	};
 }

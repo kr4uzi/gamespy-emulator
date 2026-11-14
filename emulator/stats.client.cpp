@@ -6,6 +6,8 @@
 #include <print>
 #include <ctime>
 #include <sstream>
+#include <bit>
+#include <chrono>
 #include <boost/beast/core.hpp>
 #include <boost/beast/http.hpp>
 using namespace gamespy;
@@ -32,38 +34,24 @@ namespace {
 
 	std::int32_t g_crc32(const std::string& str)
 	{
-		static constexpr std::int32_t MULTIPLIER = -1664117991;
-		std::int32_t hash = 0;
+		static constexpr std::uint32_t MULTIPLIER = 0x9CCF9319;
+		std::uint32_t hash = 0;
 
 		for (const auto& c : str)
-			hash = hash * MULTIPLIER + c;
+			hash = hash * MULTIPLIER + static_cast<unsigned char>(c);
 
-		return hash;
+		// GameSpy interprets the wrapping 32-bit result as a signed decimal value.
+		return std::bit_cast<std::int32_t>(hash);
 	}
 
 	// cap the read buffer so a client that never sends the final terminator cannot grow
 	// it without bound; snapshots can be large (end-of-round data), so allow headroom
 	constexpr std::size_t max_snapshot_buffer_size = 512 * 1024;
 
-	boost::asio::experimental::coro<std::span<char>> packet_reader(boost::asio::ip::tcp::socket& sock)
-	{
-		constexpr auto packetEnd = std::string_view{ "\\final\\" };
-		std::string buffer;
-		while (sock.is_open()) {
-			const auto& [error, length] = co_await boost::asio::async_read_until(sock, boost::asio::dynamic_buffer(buffer, max_snapshot_buffer_size), packetEnd, boost::asio::as_tuple);
-			if (error) break;
-
-			auto encoded = std::span(buffer.data(), length - packetEnd.size());
-			utils::gs_xor(encoded, utils::xor_types::GameSpy3D);
-			co_yield std::span(buffer.data(), length);
-
-			buffer.erase(0, length);
-		}
-	}
 }
 
 StatsClient::StatsClient(boost::asio::ip::tcp::socket socket, GameDB& gameDB, PlayerDB& playerDB, const std::optional<boost::asio::ip::tcp::endpoint>& snapshotEndpoint)
-	: m_Socket(std::move(socket)), m_GameDB(gameDB), m_PlayerDB(playerDB), m_SessionKey(0), m_SnapshotEndpoint(snapshotEndpoint)
+	: m_Socket(std::move(socket)), m_GameDB(gameDB), m_PlayerDB(playerDB), m_SnapshotEndpoint(snapshotEndpoint), m_SessionKey(0)
 {
 
 }
@@ -76,21 +64,35 @@ StatsClient::~StatsClient()
 boost::asio::awaitable<void> StatsClient::SendPacket(std::string message)
 {
 	utils::gs_xor(message, utils::xor_types::GameSpy3D);
-	co_await m_Socket.async_send(boost::asio::buffer(std::format("{}\\final\\", message)), boost::asio::use_awaitable);
+	message += "\\final\\";
+	co_await boost::asio::async_write(m_Socket, boost::asio::buffer(message), boost::asio::use_awaitable);
+}
+
+boost::asio::awaitable<std::optional<std::string>> StatsClient::ReadPacket()
+{
+	constexpr auto packetEnd = std::string_view{ "\\final\\" };
+	auto [error, length] = co_await boost::asio::async_read_until(m_Socket,
+		boost::asio::dynamic_buffer(m_ReadBuffer, max_snapshot_buffer_size), packetEnd,
+		boost::asio::as_tuple(boost::asio::use_awaitable));
+	if (error) co_return std::nullopt;
+
+	auto packet = m_ReadBuffer.substr(0, length);
+	m_ReadBuffer.erase(0, length);
+	auto encoded = std::span{ packet.data(), length - packetEnd.size() };
+	utils::gs_xor(encoded, utils::xor_types::GameSpy3D);
+	co_return packet;
 }
 
 boost::asio::awaitable<void> StatsClient::Process()
 {
-	auto reader = ::packet_reader(m_Socket);
-	if (!co_await Authenticate(reader))
+	if (!co_await Authenticate())
 		co_return;
 
 	while (true) {
-	//for (auto _packet = co_await ReceivePacket(); !_packet.empty(); _packet = co_await ReceivePacket()) {
-		auto __packet = co_await reader.async_resume(boost::asio::use_awaitable);
-		if (!__packet) break;
-		auto& _packet = *__packet;
-		auto packet = std::string_view{ _packet };
+		auto received = co_await ReadPacket();
+		if (!received) break;
+		auto& contents = *received;
+		auto packet = std::string_view{ contents };
 		if (packet.starts_with("\\getpid\\")) {
 			// "\getpid\\nick\%s\keyhash\%s\lid\%d"
 			std::println("[stats] {}", packet);
@@ -101,20 +103,20 @@ boost::asio::awaitable<void> StatsClient::Process()
 		}
 		else if (packet.starts_with("\\authp\\")) {
 			std::println("[stats] {}", packet);
-			auto localID = utils::value_for_key(_packet, "\\lid\\");
+			auto localID = utils::value_for_key(contents, "\\lid\\");
 			if (!localID || localID->empty()) {
 				co_await SendPacket(R"(\error\\err\0\fatal\\errmsg\missing lid parameter\id\1)");
 				continue;
 			}
 
-			auto authToken = utils::value_for_key(_packet, "\\authtoken\\");
-			auto resp = utils::value_for_key(_packet, "\\resp\\");
+			auto authToken = utils::value_for_key(contents, "\\authtoken\\");
+			auto resp = utils::value_for_key(contents, "\\resp\\");
 			if (authToken) {
 				// TODO: investigate how an authToken is tied to a specific challenge
 				// https://github.com/ntrtwl/NitroDWC/blob/main/include/gs/dummy_auth.h
 				// PreAuthenticatePlayerPartner: \authp\\authtoken\%s\resp\%s\lid\%d
 			}
-			else if (auto pid = utils::value_for_key<std::uint32_t>(_packet, "\\pid\\"); pid) {
+			else if (auto pid = utils::value_for_key<std::uint32_t>(contents, "\\pid\\"); pid) {
 				// PreAuthenticatePlayerPM: \authp\\pid\%d\resp\%s\lid\%d
 				const auto& player = co_await m_PlayerDB.GetPlayerByPID(*pid);
 				if (player && resp) {
@@ -127,7 +129,7 @@ boost::asio::awaitable<void> StatsClient::Process()
 					co_await SendPacket(std::format(R"(\pauthr\-1\lid\{})", *localID));
 				}
 			}
-			else if (auto nick = utils::value_for_key(_packet, "\\nick\\"); nick) {
+			else if (auto nick = utils::value_for_key(contents, "\\nick\\"); nick) {
 				// PreAuthenticatePlayerCD: \authp\\nick\%s\keyhash\%s\resp\%s\lid\%d
 				// during profile creation, the cd key can be linked to a players profile
 				// not sure what the resp is here though...
@@ -139,11 +141,10 @@ boost::asio::awaitable<void> StatsClient::Process()
 			std::println("[stats] {}", packet);
 		}
 		else if (packet.starts_with("\\updgame\\")) {
-			auto gamedata = utils::value_for_key<std::string>(_packet, "\\gamedata\\");
+			auto gamedata = utils::value_for_key<std::string>(contents, "\\gamedata\\");
 			if (gamedata) {
 				std::replace(gamedata->begin(), gamedata->end(), '\x1', '\\');
-				auto done = utils::value_for_key<std::uint32_t>(_packet, "\\done\\");
-				co_await HandeSnapshot(*gamedata, done && *done == 1);
+				co_await HandleSnapshot(*gamedata);
 			}
 
 			// "\updgame\\sesskey\%d\done\%d\gamedata\%s"
@@ -161,19 +162,18 @@ boost::asio::awaitable<void> StatsClient::Process()
 	}
 }
 
-boost::asio::awaitable<bool> StatsClient::Authenticate(boost::asio::experimental::coro<std::span<char>>& reader)
+boost::asio::awaitable<bool> StatsClient::Authenticate()
 {
 	// the client expects 38 bytes minimum => min challenge length is 10
 	m_ServerChallenge = utils::random_string("ABCDEFGHIJKLMNOPQRSTUVWXYZ", 10);
 
 	co_await SendPacket(std::format(R"(\lc\1\challenge\{}\id\1)", m_ServerChallenge));
 
-	//auto _packet = co_await ReceivePacket();
-	auto __packet = co_await reader.async_resume(boost::asio::use_awaitable);
-	if (!__packet) co_return false;
-	auto& _packet = *__packet;
-	auto packet = std::string_view{ _packet };
-	auto gamename = utils::value_for_key(_packet, "\\gamename\\");
+	auto received = co_await ReadPacket();
+	if (!received) co_return false;
+	auto& contents = *received;
+	auto packet = std::string_view{ contents };
+	auto gamename = utils::value_for_key(contents, "\\gamename\\");
 	if (packet.empty() || !packet.starts_with("\\auth\\") || !gamename || gamename->empty()) {
 		std::println("[stats] received invalid response during authentication\n{}", packet);
 		co_return false;
@@ -189,20 +189,19 @@ boost::asio::awaitable<bool> StatsClient::Authenticate(boost::asio::experimental
 	const auto& game = co_await m_GameDB.GetGame(*gamename);
 	const auto challenge = std::format("{}{}", g_crc32(m_ServerChallenge), game->secretKey());
 	const auto challengeHash = utils::md5(challenge);
-	if (auto response = utils::value_for_key(_packet, "\\response\\"); !response || *response != challengeHash) {
+	if (auto response = utils::value_for_key(contents, "\\response\\"); !response || *response != challengeHash) {
 		std::println("[stats] received invalid response");
 		co_await SendPacket(R"(\error\\err\0\fatal\\errmsg\Invalid Response!\id\1)");
 		co_return false; 
 	}
 
-	m_SessionKey = static_cast<decltype(m_SessionKey)>(std::time(nullptr));
-	if (m_SessionKey < 0) m_SessionKey = -m_SessionKey;
+	m_SessionKey = static_cast<std::uint32_t>(std::time(nullptr)) & 0x7FFFFFFFU;
 
 	co_await SendPacket(std::format(R"(\lc\2\sesskey\{}\proof\0\id\1)", m_SessionKey));
 	co_return true;
 }
 
-boost::asio::awaitable<void> StatsClient::HandeSnapshot(const std::string_view& data, bool final)
+boost::asio::awaitable<void> StatsClient::HandleSnapshot(const std::string_view& data)
 {
 	if (!m_SnapshotEndpoint) {
 		std::println("[stats] snapshot endpoint not configured, skipping snapshot upload");
@@ -210,6 +209,7 @@ boost::asio::awaitable<void> StatsClient::HandeSnapshot(const std::string_view& 
 	}
 
 	beast::tcp_stream stream(m_Socket.get_executor());
+	stream.expires_after(std::chrono::seconds(30));
 	co_await stream.async_connect(*m_SnapshotEndpoint, net::use_awaitable);
 
 	auto req = http::request<http::string_body>{ http::verb::post, "/ASP/bf2statistics.php", 10 };
@@ -223,8 +223,11 @@ boost::asio::awaitable<void> StatsClient::HandeSnapshot(const std::string_view& 
 	co_await http::async_write(stream, req, net::use_awaitable);
 
 	beast::flat_buffer buffer;
-	http::response<http::string_body> res;
-	co_await http::async_read(stream, buffer, res, net::use_awaitable);
+	http::response_parser<http::string_body> response;
+	response.body_limit(1024 * 1024);
+	co_await http::async_read(stream, buffer, response, net::use_awaitable);
+	if (response.get().result_int() < 200 || response.get().result_int() >= 300)
+		throw std::runtime_error("snapshot endpoint returned an HTTP error");
 
 	std::println("[stats] snapshot processed");
 }

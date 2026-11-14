@@ -3,6 +3,7 @@
 #define _GAMESPY_HTTP_CLIENT_H_
 
 #include "asio.h"
+#include <boost/beast/core/tcp_stream.hpp>
 #include <boost/url/url_view.hpp>
 
 namespace gamespy
@@ -11,7 +12,7 @@ namespace gamespy
 	class PlayerDB;
 	class HttpClient
 	{
-		boost::asio::ip::tcp::socket m_Socket;
+		boost::beast::tcp_stream m_Stream;
 		GameDB& m_GameDB;
 		PlayerDB& m_PlayerDB;
 

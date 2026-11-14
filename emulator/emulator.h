@@ -3,6 +3,7 @@
 #define _GAMESPY_EMULATOR_H_
 #include "asio.h"
 #include "task.h"
+#include "sessions.h"
 #include <memory>
 
 namespace gamespy
@@ -20,6 +21,7 @@ namespace gamespy
 	class Emulator
 	{
 		boost::asio::io_context& m_Context;
+		Sessions m_Sessions;
 		std::unique_ptr<GameDB> m_GameDB;
 		std::unique_ptr<PlayerDB> m_PlayerDB;
 		std::unique_ptr<MasterServer> m_MasterServer;
@@ -36,6 +38,8 @@ namespace gamespy
 		~Emulator();
 
 		task<void> Launch(int argc, char* argv[]);
+		void Stop();
+		task<void> Shutdown();
 
 	private:
 		task<void> InitGameDB(int argc, char* argv[]);

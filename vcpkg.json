@@ -1,8 +1,8 @@
 {
   "dependencies": [
     "boost-asio",
+    "boost-charconv",
     "boost-crc",
-    "boost-serialization",
     "boost-mysql",
     "boost-signals2",
     "boost-url",

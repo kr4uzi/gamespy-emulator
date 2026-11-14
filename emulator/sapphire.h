@@ -7,6 +7,7 @@
 #include <ranges>
 #include <concepts>
 #include <cstddef>
+#include <span>
 
 // Gamespy uses a slightly modified Sapphire II stream cipher
 // https://cryptography.org/mpj/sapphire.pdf
@@ -22,22 +23,13 @@ namespace gamespy {
         void hash_init();
 
         unsigned char keyrand(int limit,
-            unsigned char* user_key,
+            const unsigned char* user_key,
             unsigned char keysize,
             unsigned char* rsum,
             unsigned* keypos);
 
     public:
-        template<class R>
-            requires std::ranges::range<R>
-        sapphire(R&& key)
-            : sapphire(static_cast<unsigned char *>(std::data(key)), static_cast<unsigned char>(std::size(key)))
-        {
-            if (std::size(key) > 255)
-                throw std::overflow_error("Key must not be longer than 255 characters!");
-        }
-
-        sapphire(unsigned char* key, unsigned char keysize);
+        explicit sapphire(std::span<const unsigned char> key);
         ~sapphire();
 
         unsigned char decrypt(unsigned char b);
@@ -50,11 +42,11 @@ namespace gamespy {
             )
         void encrypt(R&& range) {
             for (auto& c: range)
-                c = encrypt(static_cast<unsigned char>(c));
+                c = static_cast<std::ranges::range_value_t<R>>(encrypt(static_cast<unsigned char>(c)));
         }
 
     private:
-        void initialize(unsigned char* key, unsigned char keysize);
+        void initialize(const unsigned char* key, unsigned char keysize);
         void hash_final(unsigned char* hash, unsigned char hashlength);
         void burn();
     };

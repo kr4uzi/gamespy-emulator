@@ -2,6 +2,7 @@
 #include "asio.h"
 
 namespace gamespy {
+	class Sessions;
 	class GameDB;
 	class PlayerDB;
 
@@ -11,11 +12,12 @@ namespace gamespy {
 	class LoginServer {
 		static constexpr std::uint16_t PORT = 29900; // gpcm.gamespy.com
 		boost::asio::ip::tcp::acceptor m_Acceptor;
+		Sessions& m_Sessions;
 		GameDB& m_GameDB;
 		PlayerDB& m_PlayerDB;
 
 	public:
-		LoginServer(boost::asio::io_context& context, GameDB& gameDB, PlayerDB& playerDB);
+		LoginServer(boost::asio::io_context& context, GameDB& gameDB, PlayerDB& playerDB, Sessions& sessions);
 		~LoginServer();
 
 		boost::asio::awaitable<void> AcceptClients();

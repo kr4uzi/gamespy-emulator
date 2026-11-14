@@ -101,7 +101,7 @@ task<std::optional<PlayerData>> PlayerDBSQLite::GetPlayerByPID(std::uint64_t pid
 task<std::vector<PlayerData>> PlayerDBSQLite::GetPlayerByMailAndPassword(const std::string_view& email, const std::string_view& password)
 {
 	auto players = std::vector<PlayerData>{};
-	auto stmt = sqlite::stmt{ m_DB, "SELECT id, name, country FROM player WHERE email=? AND password=?", email, password };
+	auto stmt = sqlite::stmt{ m_DB, "SELECT id, name, country FROM player WHERE email=? COLLATE NOCASE AND password=?", email, password };
 	std::tuple<std::uint64_t, std::string_view, std::string_view> data;
 	while (stmt.query(data))
 		players.emplace_back(std::get<0>(data), std::get<1>(data), email, password, std::get<2>(data));

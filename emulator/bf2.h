@@ -3,8 +3,7 @@
 #define _GAMESPY_BF2_H_
 
 #include "game.h"
-#include "asio.h"
-#include <boost/mysql.hpp>
+#include "mysql_pool.h"
 #include <optional>
 #include <string_view>
 
@@ -12,8 +11,8 @@ namespace gamespy
 {
 	class BF2 : public Game
 	{
-		boost::mysql::any_connection m_Conn;
 		std::optional<boost::mysql::connect_params> m_Params;
+		std::optional<boost::mysql::connection_pool> m_Pool;
 
 	public:
 		BF2(boost::asio::io_context& context);

@@ -21,9 +21,10 @@ boost::asio::awaitable<void> CDKeyServer::AcceptConnections()
 	while (m_Socket.is_open()) {
 		udp::endpoint client;
 		const auto& [error, length] = co_await m_Socket.async_receive_from(boost::asio::buffer(buff), client, boost::asio::as_tuple(boost::asio::use_awaitable));
-		if (error)
-			break;
-		else if (length == 0)
+		if (error == boost::asio::error::message_size) continue;
+		if (error == boost::asio::error::operation_aborted) co_return;
+		if (error) throw boost::system::system_error(error);
+		if (length == 0)
 			continue;
 
 		auto message = std::span{ buff }.subspan(0, length);

@@ -375,3 +375,9 @@ redirect/*.def
 redirect/*.dll
 redirect/exports.h
 emulator/build
+
+# CMake builds, packages and local player data
+/build*/
+/dist/
+/CMakeUserPresets.json
+/players.sqlite3*

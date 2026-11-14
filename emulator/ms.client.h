@@ -27,13 +27,12 @@ namespace gamespy {
 		std::shared_ptr<Game> m_Game;
 		std::vector<std::string> m_KeyListStorage;
 		std::vector<std::string_view> m_KeyList; // points to m_KeyListStorage
-		std::vector<std::uint8_t> m_OutBuffer;
-		boost::signals2::scoped_connection m_OnServerAdded, m_OnServerRemoved;
 		boost::asio::experimental::channel<void(boost::system::error_code, std::vector<std::uint8_t>)> m_SignalChannel;
+		boost::signals2::scoped_connection m_OnServerAdded, m_OnServerRemoved;
 
 	public:
-		BrowserClient(BrowserClient&& rhs) = default;
-		BrowserClient& operator=(BrowserClient&& rhs) = default;
+		BrowserClient(BrowserClient&& rhs) = delete;
+		BrowserClient& operator=(BrowserClient&& rhs) = delete;
 
 		BrowserClient(boost::asio::ip::tcp::socket socket, GameDB &db);
 		~BrowserClient();
@@ -41,14 +40,18 @@ namespace gamespy {
 		boost::asio::awaitable<void> Process();
 
 	private:
-		boost::asio::awaitable<void> StartEncryption(const decltype(ServerListRequest::challenge)& clientChallenge, const Game& game);
+		boost::asio::awaitable<std::optional<std::vector<std::uint8_t>>> ReadPacket();
+		boost::asio::awaitable<void> ReadRequests();
+		boost::asio::awaitable<void> SendUpdates();
+		void QueueUpdate(std::uint8_t type, std::vector<std::uint8_t> bytes);
+		boost::asio::awaitable<void> StartEncryption(const decltype(ServerListRequest::challenge)& clientChallenge, const Game& sourceGame);
 		boost::asio::awaitable<void> HandleServerListRequest(const std::span<const std::uint8_t>& bytes);
 
 		template<class R> requires std::ranges::range<R> && std::same_as<std::ranges::range_value_t<R>, unsigned char>
-		boost::asio::awaitable<void> Send(R&& bytes)
+		boost::asio::awaitable<void> Send(R bytes)
 		{
 			m_Cypher->encrypt(bytes);
-			co_await m_Socket.async_send(boost::asio::buffer(bytes), boost::asio::use_awaitable);
+			co_await boost::asio::async_write(m_Socket, boost::asio::buffer(bytes), boost::asio::use_awaitable);
 		}
 	};
 }
