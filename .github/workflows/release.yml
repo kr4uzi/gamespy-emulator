@@ -1,0 +1,54 @@
+name: Release packages
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.event.release.id }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    uses: ./.github/workflows/build.yml
+
+  upload:
+    name: Attach packages to the release
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Download this run's packages
+        uses: actions/download-artifact@v8
+        with:
+          pattern: gamespy-emulator-*
+          path: packages
+          merge-multiple: true
+
+      - name: Verify and upload all release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        working-directory: packages
+        shell: bash
+        run: |
+          packages=(
+            gamespy-emulator-windows-x64.zip
+            gamespy-emulator-windows-arm64.zip
+            gamespy-emulator-linux-x64.tar.gz
+            gamespy-emulator-linux-arm64.tar.gz
+          )
+          assets=()
+          for package in "${packages[@]}"; do
+            test -s "$package"
+            test -s "$package.sha256"
+            sha256sum --check "$package.sha256"
+            assets+=("$package" "$package.sha256")
+          done
+          gh release upload --repo "$GH_REPO" --clobber -- "$RELEASE_TAG" "${assets[@]}"

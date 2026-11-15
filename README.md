@@ -96,11 +96,29 @@ It builds and tests four native targets: Windows x64, Windows ARM64, Linux x64, 
 Linux x64 also runs the tests with AddressSanitizer and UndefinedBehaviorSanitizer.
 
 Open a successful run under **Actions → Build and test** and download the matching
-`gamespy-emulator-<platform>-<architecture>` artifact. Extract the Windows ZIP and run `emulator.exe`
-from that folder. Linux artifacts contain a `.tar.gz`; extract that archive too, preserving its executable
-permissions, then run `./emulator`. The Linux packages are built on Ubuntu 24.04 and require a compatible
-glibc (2.39 or newer). Downloads are retained for 30 days. A local compiler or vcpkg installation is not
-required to use an artifact.
+`gamespy-emulator-<platform>-<architecture>` artifact. Each artifact contains a package and its
+SHA-256 checksum. Extract the artifact, then the package inside: `.zip` on Windows or `.tar.gz` on Linux.
+Run `emulator.exe` or `./emulator` from the extracted folder, which also contains `http/` and this README.
+The Linux packages preserve executable permissions and are built on Ubuntu 24.04, requiring a compatible
+glibc (2.39 or newer). Actions downloads are retained for 30 days. A local compiler or vcpkg installation
+is not required to use a package.
+
+### GitHub Releases
+
+Publish a release or prerelease for a tag containing these workflows. [Release packages](.github/workflows/release.yml)
+then builds and tests that tagged commit using the same four-target build workflow. Once every build and test
+passes, it verifies the package checksums and attaches these archives, each with a `.sha256` file:
+
+- `gamespy-emulator-windows-x64.zip`
+- `gamespy-emulator-windows-arm64.zip`
+- `gamespy-emulator-linux-x64.tar.gz`
+- `gamespy-emulator-linux-arm64.tar.gz`
+
+Download the matching archive from the release's **Assets** and extract it directly. Release assets are
+separate from the temporary Actions downloads. The upload uses GitHub's built-in token; no extra secret
+is needed. Rerunning the release workflow replaces assets with the same names. Publishing the release
+triggers packaging; creating a draft release or pushing a tag alone does not. As in OpenBF2, this flow
+uploads after publication and requires mutable releases (GitHub's release immutability setting must be off).
 
 ### Tests and memory checks
 

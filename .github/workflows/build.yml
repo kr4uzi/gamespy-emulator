@@ -5,6 +5,7 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
@@ -38,6 +39,9 @@ jobs:
       VCPKG_MAX_CONCURRENCY: 2
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
 
       - name: Prepare Windows environment
         if: matrix.platform == 'windows'
@@ -75,24 +79,32 @@ jobs:
       - name: Package
         run: cmake --install build/${{ matrix.preset }} --config Release --prefix dist/package
 
+      - name: Archive Windows package
+        if: matrix.platform == 'windows'
+        working-directory: dist/package
+        run: cmake -E tar cf ../gamespy-emulator-windows-${{ matrix.architecture }}.zip --format=zip .
+
       - name: Archive Linux package
         if: matrix.platform == 'linux'
         run: tar -C dist/package -czf dist/gamespy-emulator-linux-${{ matrix.architecture }}.tar.gz .
 
-      - name: Upload Windows executable
-        if: matrix.platform == 'windows'
-        uses: actions/upload-artifact@v7
-        with:
-          name: gamespy-emulator-windows-${{ matrix.architecture }}
-          path: dist/package/
-          if-no-files-found: error
-          retention-days: 30
+      - name: Write package checksums
+        shell: bash
+        working-directory: dist
+        run: |
+          for package in *.zip *.tar.gz; do
+            [ -f "$package" ] || continue
+            cmake -E sha256sum "$package" > "$package.sha256"
+          done
 
-      - name: Upload Linux executable
-        if: matrix.platform == 'linux'
+      - name: Upload packages
         uses: actions/upload-artifact@v7
         with:
-          name: gamespy-emulator-linux-${{ matrix.architecture }}
-          path: dist/*.tar.gz
+          name: gamespy-emulator-${{ matrix.platform }}-${{ matrix.architecture }}
+          path: |
+            dist/*.zip
+            dist/*.tar.gz
+            dist/*.sha256
           if-no-files-found: error
+          compression-level: 0
           retention-days: 30
